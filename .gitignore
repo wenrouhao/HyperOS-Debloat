@@ -11,6 +11,9 @@ output/
 # 日志
 *.log
 
+# 本地回归测试脚本（不入库）
+test/
+
 # 系统文件
 .DS_Store
 Thumbs.db
