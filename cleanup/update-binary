@@ -1,0 +1,106 @@
+#!/sbin/sh
+umask 022
+
+OUTFD=$2
+ZIPFILE=$3
+
+ui_print() { echo "$1"; }
+
+mount /data 2>/dev/null
+mount /data 2>/dev/null
+
+# 支持新旧模块名
+MODIDS="HyperOS_Debloat HyperOS3_Debloat"
+
+ui_print " "
+ui_print " HyperOS-Debloat 紧急清理包"
+ui_print " 用于卡米/卡锁屏时完整恢复"
+ui_print " "
+
+FOUND=0
+ALL_RESTORE=""
+
+for MODID in $MODIDS; do
+  MODDIR="/data/adb/modules/$MODID"
+  MODDIR_UPD="/data/adb/modules_update/$MODID"
+  [ -d "$MODDIR" ] || [ -d "$MODDIR_UPD" ] || continue
+  FOUND=1
+
+  # 收集需要恢复的包名
+  for f in .data_apps_removed .apex_apps_removed .pm_removed; do
+    [ -f "$MODDIR/$f" ] && ALL_RESTORE="$ALL_RESTORE $(cat "$MODDIR/$f")"
+  done
+
+  ui_print " 检测到模块：$MODID"
+
+  # 卸载模块相关挂载（防止 rm 残留）
+  for d in $(find "$MODDIR" -type d 2>/dev/null | sort -r); do
+    umount -l "$d" 2>/dev/null
+  done
+  for d in $(find "$MODDIR_UPD" -type d 2>/dev/null | sort -r); do
+    umount -l "$d" 2>/dev/null
+  done
+
+  # 删除模块目录
+  rm -rf "$MODDIR"
+  rm -rf "$MODDIR_UPD"
+done
+
+if [ "$FOUND" = "0" ]; then
+  ui_print " 未检测到模块，无需清理"
+  ui_print " "
+  exit 0
+fi
+
+ui_print " 模块目录已清理"
+
+# 去重恢复列表
+RESTORE_LIST=""
+for p in $ALL_RESTORE; do
+  case " $RESTORE_LIST " in
+    *" $p "*) ;;
+    *) RESTORE_LIST="$RESTORE_LIST $p" ;;
+  esac
+done
+
+TOTAL=$(echo $RESTORE_LIST | wc -w)
+[ "$TOTAL" -gt 0 ] && ui_print " 需恢复应用：$TOTAL 个"
+
+# 尝试 pm 恢复（部分 TWRP 支持）
+RESTORE_OK=0
+if [ "$TOTAL" -gt 0 ]; then
+  for pkg in $RESTORE_LIST; do
+    [ -z "$pkg" ] && continue
+    if pm install-existing --user 0 "$pkg" >/dev/null 2>&1; then
+      RESTORE_OK=$((RESTORE_OK + 1))
+    fi
+  done
+fi
+
+if [ "$RESTORE_OK" -gt 0 ]; then
+  ui_print " pm 恢复成功：$RESTORE_OK 个"
+fi
+
+# pm 不可用时，删除 package-restrictions.xml 让系统重建
+if [ "$TOTAL" -gt 0 ] && [ "$RESTORE_OK" -eq 0 ]; then
+  ui_print " "
+  ui_print " 当前环境无法运行 pm"
+  ui_print " 将清除应用限制配置，系统重启后重建"
+  ui_print " 所有应用将恢复默认启用状态"
+  rm -f /data/system/users/0/package-restrictions.xml
+  rm -f /data/system/users/0/package-restrictions.xml.fallback
+  rm -f /data/system/users/0/package-restrictions.xml.reservecopy
+  # 多用户场景
+  for u in /data/system/users/*/; do
+    rm -f "${u}package-restrictions.xml"
+    rm -f "${u}package-restrictions.xml.fallback"
+    rm -f "${u}package-restrictions.xml.reservecopy"
+  done
+  ui_print " 应用限制配置已清除"
+fi
+
+ui_print " "
+ui_print " 清理完成，请重启设备"
+ui_print " 如仍有应用缺失，进系统后在终端执行："
+ui_print "   pm install-existing --user 0 <包名>"
+ui_print " "

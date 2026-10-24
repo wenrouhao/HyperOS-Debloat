@@ -124,12 +124,15 @@ EOF
 }
 
 # 卸载 REPLACE 应用的 data 分区副本（防止用户更新过的应用绕过精简）
+# 只对实际安装在 /data/app/ 下的应用执行 pm uninstall
+# 物理位置在 /product、/system 下的应用只靠 .replace 遮蔽，便于 TWRP 直接删目录恢复
 uninstall_replace_apps() {
   local record_file="$MODPATH/.data_apps_removed"
   : > "$record_file"
   for item in $REPLACE; do
     local pkg=$(get_pkg_name "$item")
     [ -z "$pkg" ] && continue
+    pm path "$pkg" < /dev/null 2>/dev/null | grep -q "^package:/data/app/" || continue
     if pm uninstall -k --user 0 "$pkg" < /dev/null >/dev/null 2>&1; then
       echo "$pkg" >> "$record_file"
     fi

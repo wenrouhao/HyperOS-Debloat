@@ -58,6 +58,16 @@ jobs:
           cd /tmp/module && zip -r "/tmp/${ZIP_NAME}" .
           cp "/tmp/${ZIP_NAME}" ${GITHUB_WORKSPACE}/
 
+      - name: Build cleanup zip
+        run: |
+          CLEANUP_ZIP="HyperOS-Debloat-cleanup.zip"
+          mkdir -p /tmp/cleanup/META-INF/com/google/android
+          cp cleanup/update-binary /tmp/cleanup/META-INF/com/google/android/update-binary
+          cp cleanup/updater-script /tmp/cleanup/META-INF/com/google/android/updater-script
+          chmod +x /tmp/cleanup/META-INF/com/google/android/update-binary
+          cd /tmp/cleanup && zip -r "/tmp/${CLEANUP_ZIP}" .
+          cp "/tmp/${CLEANUP_ZIP}" ${GITHUB_WORKSPACE}/
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
