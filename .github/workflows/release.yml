@@ -29,20 +29,28 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Extract changelog from commit message
+      - name: Extract changelog from CHANGELOG.md
         id: changelog
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=format:"%B")
-          echo "COMMIT_MSG<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          BODY=$(awk -v ver="$VERSION" '
+            index($0, "## " ver) == 1 { flag = 1; next }
+            /^## / && flag { exit }
+            flag { print }
+          ' CHANGELOG.md)
+          [ -z "$BODY" ] && BODY="详见 CHANGELOG.md"
+          {
+            echo "BODY<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build module zip
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
-          ZIP_NAME="HyperOS3-Debloat-${VERSION}.zip"
+          ZIP_NAME="HyperOS-Debloat-${VERSION}.zip"
           mkdir -p /tmp/module/META-INF/com/google/android
-          cp install.sh uninstall.sh post-fs-data.sh module.prop pkg_map.sh apps.db /tmp/module/
+          cp install.sh uninstall.sh post-fs-data.sh service.sh module.prop pkg_map.sh apps.db /tmp/module/
           mkdir -p /tmp/module/webroot
           cp webroot/* /tmp/module/webroot/
           echo '#MAGISK' > /tmp/module/META-INF/com/google/android/updater-script
@@ -54,30 +62,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
-          name: HyperOS3-Debloat ${{ steps.version.outputs.VERSION }}
+          name: HyperOS-Debloat ${{ steps.version.outputs.VERSION }}
           draft: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') || contains(steps.version.outputs.VERSION, 'rc') }}
           prerelease: false
           make_latest: ${{ !contains(steps.version.outputs.VERSION, 'beta') && !contains(steps.version.outputs.VERSION, 'alpha') && !contains(steps.version.outputs.VERSION, 'rc') }}
           body: |
             ## ${{ steps.version.outputs.VERSION }}
 
-            ${{ steps.changelog.outputs.COMMIT_MSG }}
+            ${{ steps.changelog.outputs.BODY }}
 
             ---
 
             ### 安装方法
-            1. 下载 `HyperOS3-Debloat-${{ steps.version.outputs.VERSION }}.zip`
+            1. 下载 `HyperOS-Debloat-${{ steps.version.outputs.VERSION }}.zip`
             2. 在 KernelSU 管理器中从本地安装
             3. 重启生效
 
             ### 精简模式
             | 模式 | 说明 |
             |------|------|
-            | ✅ 快速精简（推荐） | 小爱推荐+无障碍+游戏 |
-            | ⚡ 标准精简 | +云服务+跨屏+汽车+互联+应用商店 |
-            | 🔥 深度精简 | +AI全部+负一屏+弹幕+窗口+系统服务 |
-            | 🎛️ 自定义模式 | 每组可选：全部精简/保留核心/全部保留 |
+            | ✅ 快速精简（推荐） | 广告/追踪 + 游戏中心 |
+            | ⚡ 标准精简 | + 设备互联/生态 |
+            | 🔥 深度精简 | + AI/小爱 + 内容/工具/安全 + 系统服务 + 无障碍/宏 |
+            | 🎛️ 自定义模式 | 每组可选：全部精简 / 全部保留 / 逐个选择 |
           files: |
-            HyperOS3-Debloat-*.zip
+            HyperOS-Debloat-*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

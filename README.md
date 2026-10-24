@@ -1,11 +1,12 @@
-# HyperOS3-Debloat
+# HyperOS-Debloat
 
-HyperOS3 专用精简模块，支持 4 种精简模式 + WebUI 管理，安全移除不必要的系统应用。
+HyperOS 3 / 4 通用精简模块，支持 4 种精简模式 + WebUI 管理，安全移除不必要的系统应用。
 
 ## 适用环境
 
-- 系统：HyperOS3
-- 框架：KernelSU / Magisk
+- 系统：HyperOS 3 / HyperOS 4
+- 框架：KernelSU（需元模块）/ Magisk
+- 元模块：magic_mount_rs / mountify / Hybrid Mount / NoMount（推荐 magic_mount_rs）
 
 ## 功能特性
 
@@ -13,17 +14,19 @@ HyperOS3 专用精简模块，支持 4 种精简模式 + WebUI 管理，安全�
 - 📱 WebUI 管理界面（暗色/亮色主题、搜索、分组折叠）
 - ⚠️ 危险项精简确认弹窗
 - 🔄 覆盖安装自动保留配置
-- 📦 66 个应用支持精简
+- 📦 68 个应用支持精简
 - 🔧 自定义精简应用（设置中开启）
 - 📝 模块日志（默认关闭，可在设置中开启）
 
 ## 安装方法
 
-1. 从 [Releases](https://github.com/wenrouhao/HyperOS3-Debloat/releases) 下载最新版本 ZIP
+1. 从 [Releases](https://github.com/wenrouhao/HyperOS-Debloat/releases) 下载最新版本 ZIP
 2. 打开 KernelSU 管理器 → 模块 → 从本地安装 → 选择下载的 ZIP
 3. 等待安装完成，**不要重启**
 4. 按照屏幕提示操作（见下方按键说明）
 5. 操作完成后重启
+
+> **从 v4.x 升级**：模块 id 已改为 `HyperOS_Debloat`。安装新版时会自动调用旧版卸载逻辑（恢复已精简应用）并移除旧模块；若提示无法移除，请先在管理器中卸载旧版再安装。
 
 ## 按键说明
 
@@ -136,11 +139,13 @@ HyperOS3 专用精简模块，支持 4 种精简模式 + WebUI 管理，安全�
 
 ## 更新方法
 
-直接覆盖刷入新版本 ZIP 即可，无需卸载旧版本。
+v5.x 之间可直接覆盖刷入，无需卸载旧版本；从 v4.x 升级请按上方说明先卸载旧版。
 
-## 卸载方法
+## 卸载与恢复（务必阅读）
 
-在 KernelSU 管理器中卸载模块，重启即可恢复。
+- **请通过 KernelSU / Magisk 管理器卸载模块**，或先在 WebUI 中关闭对应开关并保存、重启。
+- **不要直接在 recovery 或文件管理器中删除模块目录。** 模块记录了已精简应用的卸载状态，只有管理器卸载才会触发恢复脚本；recovery 直接删除不会恢复已被卸载的系统应用，可能导致开机卡激活界面、功能缺失。
+- 如果已经在 recovery 删除了模块：重新安装模块 → 打开 WebUI 把所有开关关掉 → 保存并重启；或在终端执行 `pm install-existing --user 0 <包名>` 手动恢复。
 
 ## 作者
 

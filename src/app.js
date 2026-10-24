@@ -5,7 +5,7 @@ let changed = false;
 let searchQuery = "";
 let logEnabled = false;
 let addAppEnabled = false;
-const MODPATH = "/data/adb/modules/HyperOS3_Debloat";
+const MODPATH = "/data/adb/modules/HyperOS_Debloat";
 const DANGEROUS_GROUPS = ["危险项"];
 
 function initTheme() {
@@ -93,50 +93,103 @@ function showConfirmDialog(overlayId, options = {}) {
   });
 }
 
+let logBuffer = [];
+
 async function log(msg) {
   if (!logEnabled) return;
   const ts = new Date().toLocaleString("zh-CN", { hour12: false });
-  const line = "[" + ts + "] " + msg;
+  logBuffer.push("[" + ts + "] " + msg);
+}
+
+// 缓冲日志一次性写入，避免每条日志一次外部命令
+async function flushLog() {
+  if (!logEnabled || logBuffer.length === 0) return;
+  const text = logBuffer.join("\n") + "\n";
+  logBuffer = [];
   try {
-    await exec("echo '" + line.replace(/'/g, "'\\''") + "' >> \"" + MODPATH + "/webroot/debug.log\"");
+    await exec("cat >> \"" + MODPATH + "/webroot/debug.log\" << 'EOF'\n" + text + "EOF");
   } catch (e) {
     console.error('Log write failed:', e);
   }
 }
 
-async function syncReplace(app) {
+// 同步调试日志开关到模块目录（service.sh 据此写日志）
+async function syncLogFlag() {
   try {
-    const prefixMatch = app.path.match(/^(apex|pm):/);
-    if (prefixMatch) {
-      const pkg = app.path.replace(prefixMatch[0], '');
-      if (app.status) {
-        await exec('pm uninstall -k --user 0 "' + pkg + '"');
-      } else {
-        await exec('pm install-existing --user 0 "' + pkg + '"');
-      }
-      return;
-    }
-    const dir = MODPATH + "/" + app.path;
-    if (app.status) {
-      await exec('mkdir -p "' + dir + '" && touch "' + dir + '/.replace"');
-    } else {
-      await exec('rm -rf "' + dir + '"');
-    }
+    await exec(logEnabled
+      ? 'touch "' + MODPATH + '/webroot/.debug_on"'
+      : 'rm -f "' + MODPATH + '/webroot/.debug_on"');
   } catch (e) {
-    await log('syncReplace failed: ' + app.name + ' - ' + e.message);
+    console.error('Log flag sync failed:', e);
   }
 }
 
-const DANGER_WARNINGS = {
-  "NFC服务": "精简后门禁卡、公交卡、付款功能可能失效",
-  "系统安全组件": "精简后可能影响应用安全检测",
-  "搜狗输入法小米版": "请确保已安装其他输入法，否则无法输入文字",
-  "讯飞输入法": "请确保已安装其他输入法，否则无法输入文字",
-  "Cell Broadcast Service(紧急警报)": "精简后收不到地震、灾害等紧急预警通知",
-  "小米智能卡网页组件": "精简后NFC公交卡、门禁卡、付款功能可能会失效",
-  "小米智能卡": "精简后NFC公交卡、门禁卡、付款功能可能会失效",
-  "米币支付": "精简后米币相关支付功能失效",
-  "应用商店": "精简后无法通过官方商店下载应用",
+// 生成解析候选路径的 shell 片段（结果写入 $v）
+function resolveSnippet(path, v) {
+  const cands = (path || '').split(';').filter(Boolean);
+  let s = v + '=""\nfor _c in';
+  for (const c of cands) s += " '" + c.replace(/'/g, "'\\''") + "'";
+  s += '; do\n';
+  s += '  case "$_c" in apex:*|pm:*) ' + v + '="$_c"; break ;; esac\n';
+  s += '  case "$_c" in /system/product/*) if [ -L /system/product ]; then _r="/product${_c#/system/product}"; else _r="$_c"; fi ;; /system/system_ext/*) if [ -L /system/system_ext ]; then _r="/system_ext${_c#/system/system_ext}"; else _r="$_c"; fi ;; *) _r="$_c" ;; esac\n';
+  s += '  if [ -e "$_r" ]; then ' + v + '="$_r"; break; fi\n';
+  s += 'done\n';
+  return s;
+}
+
+// 生成维护 .pm_removed 记录的 shell 片段（供删除模块时恢复应用）
+function pmRecordSnippet(pkg, removed, file) {
+  const q = "'" + pkg.replace(/'/g, "'\\''") + "'";
+  if (removed) {
+    return 'grep -qxF ' + q + ' "' + file + '" 2>/dev/null || echo ' + q + ' >> "' + file + '"\n';
+  }
+  return 'if [ -f "' + file + '" ]; then grep -vxF ' + q + ' "' + file + '" > "' + file + '.tmp" 2>/dev/null; mv "' + file + '.tmp" "' + file + '"; fi\n';
+}
+
+// 批量应用精简/恢复（一次外部命令完成）
+async function applyReplaceBatch(list) {
+  let script = '';
+  const R = MODPATH + '/.pm_removed';
+  for (const app of list) {
+    const p = app.path || '';
+    if (/^(apex|pm):/.test(p)) {
+      const pkg = p.replace(/^(apex|pm):/, '');
+      script += 'pm ' + (app.status ? 'uninstall -k --user 0' : 'install-existing --user 0') + " '" + pkg + "' < /dev/null >/dev/null 2>&1\n";
+      script += pmRecordSnippet(pkg, app.status, R);
+      continue;
+    }
+    script += resolveSnippet(p, '_real');
+    // 元模块只扫描模块的 system 目录，独立分区需落到 system/product 等路径下
+    script += 'case "$_real" in /system/*) _mdir="' + MODPATH + '$_real" ;; /*) _mdir="' + MODPATH + '/system$_real" ;; *) _mdir="" ;; esac\n';
+    if (app.status) {
+      script += 'if [ -n "$_mdir" ]; then mkdir -p "$_mdir" && touch "$_mdir/.replace"; fi\n';
+      if (app.pkg) {
+        script += "pm uninstall -k --user 0 '" + app.pkg + "' < /dev/null >/dev/null 2>&1\n";
+        script += pmRecordSnippet(app.pkg, true, R);
+      }
+    } else {
+      script += 'if [ -n "$_mdir" ]; then umount -l "$_mdir" >/dev/null 2>&1; rm -rf "$_mdir"; fi\n';
+      if (app.pkg) {
+        script += "pm install-existing --user 0 '" + app.pkg + "' < /dev/null >/dev/null 2>&1\n";
+        script += pmRecordSnippet(app.pkg, false, R);
+      }
+    }
+  }
+  if (script) await exec(script);
+}
+
+// 警告文案由 apps.db / apps.conf 下发，WebUI 不再维护副本
+const GROUP_MODES = {
+  "广告/追踪": 1,
+  "游戏中心": 1,
+  "设备互联/生态": 2,
+  "AI/小爱": 3,
+  "内容/工具/安全": 3,
+  "系统服务": 3,
+  "无障碍/宏": 3,
+  "危险项": 0,
+  "自定义": 0,
+  "其他": 0
 };
 
 function expandCustomGroup() {
@@ -152,7 +205,7 @@ function expandCustomGroup() {
 function showDangerConfirm(app) {
   return showConfirmDialog("dangerOverlay", {
     appName: app.name,
-    desc: DANGER_WARNINGS[app.name] || "此应用属于危险项，精简后可能影响系统功能"
+    desc: app.warning || "此应用属于危险项，精简后可能影响系统功能"
   });
 }
 
@@ -197,12 +250,16 @@ async function loadConfig() {
       if (!trimmed || trimmed.startsWith("#")) return acc;
       const parts = trimmed.split("|");
       if (parts.length >= 4) {
+        const group = parts[4] || "其他";
+        const fallbackMode = GROUP_MODES[group] !== undefined ? GROUP_MODES[group] : 0;
         acc.push({
           path: parts[0],
           name: parts[1],
           pkg: parts[2],
           status: parts[3] === "1",
-          group: parts[4] || "其他"
+          group: group,
+          mode: parts[5] !== undefined && parts[5] !== "" ? parts[5] : String(fallbackMode),
+          warning: parts[6] || ""
         });
       }
       return acc;
@@ -428,19 +485,18 @@ async function saveConfig() {
   const disabled = apps.filter((a) => a.status).length;
   await log("Saving config... " + disabled + "/" + apps.length + " debloated");
   try {
-    await exec('cat > "' + target + '" << \'EOF\'\n# HyperOS3 Debloat 配置\n# 格式：路径|显示名|包名|状态（1=精简 0=保留）|分组\nEOF');
-    let saved = 0;
+    let content = '# HyperOS Debloat 配置\n# 格式：候选路径|显示名|包名|状态（1=精简 0=保留）|分组|模式|警告文案\n';
     for (const app of apps) {
-      const line = app.path + "|" + app.name + "|" + app.pkg + "|" + (app.status ? "1" : "0") + "|" + app.group;
-      await exec("echo '" + line.replace(/'/g, "'\\''") + "' >> \"" + target + '"');
-      saved++;
+      content += app.path + "|" + app.name + "|" + app.pkg + "|" + (app.status ? "1" : "0") + "|" + app.group + "|" + (app.mode || "0") + "|" + (app.warning || "") + "\n";
     }
-    await log("Saved, wrote " + saved + " entries");
+    await exec('cat > "' + target + '" << \'EOF\'\n' + content + 'EOF');
+    await log("Saved, wrote " + apps.length + " entries");
 
+    const todo = [];
     if (deletedApps.length > 0) {
       await log("Restoring deleted: " + deletedApps.length);
       for (const app of deletedApps) {
-        await syncReplace({ ...app, status: false });
+        todo.push({ ...app, status: false });
       }
       deletedApps = [];
     }
@@ -451,10 +507,11 @@ async function saveConfig() {
     for (const app of apps) {
       const originalStatus = originalMap.get(app.pkg);
       if (originalStatus === undefined || originalStatus !== app.status) {
-        await syncReplace(app);
+        todo.push(app);
         changedCount++;
       }
     }
+    await applyReplaceBatch(todo);
     await log("Done, processed " + changedCount + " apps");
 
     originalApps = apps.map(app => ({ ...app }));
@@ -471,6 +528,7 @@ async function saveConfig() {
     await log("Save failed: " + err.message);
     toast("保存失败：" + err.message);
   } finally {
+    await flushLog();
     btn.disabled = false;
     btn.textContent = "保存";
     if (btnReboot) btnReboot.disabled = false;
@@ -479,10 +537,12 @@ async function saveConfig() {
 
 async function doReboot() {
   await log("User triggered reboot");
+  await flushLog();
   try {
     await exec("svc power reboot");
   } catch (err) {
     await log("Reboot failed: " + err.message);
+    await flushLog();
     toast("重启失败，请手动重启");
   }
 }
@@ -649,7 +709,8 @@ async function confirmAddApps() {
         name: app.name,
         pkg: app.pkg,
         status: true,
-        group: '自定义'
+        group: '自定义',
+        mode: '0'
       });
       await log('Add app: ' + app.name + ' (' + app.pkg + ')');
     }
@@ -671,9 +732,9 @@ async function confirmAddApps() {
 async function saveToAppsDb() {
   try {
     const dbPath = MODPATH + '/apps.db';
-    let content = '# HyperOS3 Debloat 应用数据库\n# 格式：路径|显示名|包名|分组\n';
+    let content = '# HyperOS Debloat 应用数据库（HyperOS 3 / 4 通用）\n# 格式：候选路径;备选|显示名|包名|分组|模式|警告文案\n';
     apps.forEach(app => {
-      content += app.path + '|' + app.name + '|' + app.pkg + '|' + app.group + '\n';
+      content += app.path + '|' + app.name + '|' + app.pkg + '|' + app.group + '|' + (app.mode || '0') + '|' + (app.warning || '') + '\n';
     });
     await exec('cat > "' + dbPath + '" << \'EOF\'\n' + content + 'EOF');
     await log('Synced to apps.db');
@@ -763,6 +824,7 @@ function loadSettings() {
     toggleAddApp.setAttribute('aria-checked', addAppEnabled);
   }
   document.getElementById('addAppRow').style.display = addAppEnabled ? '' : 'none';
+  syncLogFlag();
 }
 
 document.getElementById('btnSettings').addEventListener('click', () => {
@@ -776,6 +838,7 @@ document.getElementById('toggleLog').addEventListener('click', function() {
   this.classList.toggle('on');
   this.setAttribute('aria-checked', logEnabled);
   localStorage.setItem('logEnabled', logEnabled);
+  syncLogFlag();
   toast(logEnabled ? '日志已开启' : '日志已关闭');
 });
 document.getElementById('toggleAddApp').addEventListener('click', async function() {

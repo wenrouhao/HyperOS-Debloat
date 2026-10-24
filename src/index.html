@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HyperOS3 精简管理</title>
+    <title>HyperOS 精简管理</title>
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
                 <svg class="header-icon" viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
                 <div>
                     <h1>精简管理</h1>
-                    <div class="header-sub">HyperOS3 Debloat</div>
+                    <div class="header-sub">HyperOS Debloat</div>
                     <div class="header-version" id="headerVersion">KernelSU Module</div>
                 </div>
             </div>
@@ -32,6 +32,10 @@
             <input type="text" id="searchInput" placeholder="搜索应用名或包名…" autocomplete="off">
         </div>
         <div class="stats" id="stats" aria-live="polite">正在加载…</div>
+        <div class="warn-banner">
+            <div class="warn-title">⚠️ 取消精简请勿直接在 recovery 删模块目录</div>
+            <div class="warn-text">请在管理器卸载，或在下方关闭开关后保存重启。recovery 删除不会恢复已卸载的系统应用，可能卡激活界面。</div>
+        </div>
         <div class="tips">
             <div class="tips-title">💡 使用说明</div>
             <div class="tips-item"><span class="tips-dot"></span><span>开启 = 精简该应用，关闭 = 保留该应用</span></div>

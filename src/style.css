@@ -592,6 +592,26 @@
         .group:nth-child(6) { animation-delay: 0.2s; }
         .group:nth-child(7) { animation-delay: 0.24s; }
         .group:nth-child(8) { animation-delay: 0.28s; }
+        /* ===== 风险提示横幅 ===== */
+        .warn-banner {
+            background: var(--danger-dim);
+            border: 1px solid rgba(255,59,59,0.25);
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin: 12px 0;
+        }
+        .warn-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--danger);
+            margin-bottom: 4px;
+        }
+        .warn-text {
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text2);
+        }
+
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: 0.01ms !important;

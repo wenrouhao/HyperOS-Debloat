@@ -1,88 +1,91 @@
-# HyperOS3 Debloat 应用数据库
-# 格式：路径|显示名|包名|分组
+# HyperOS Debloat 应用数据库（HyperOS 3 / 4 通用）
+# 格式：候选路径;备选|显示名|包名|分组|模式|警告文案（可空）
+# 候选路径用分号分隔，运行时取第一个真实存在的路径
+# 模式：1=快速精简 2=标准精简 3=深度精简 0=仅手动/危险项
+# 警告文案仅在 WebUI 与安装界面提示，不影响精简逻辑
 # 分组顺序即 WebUI 和安装界面的显示顺序
 # 新增应用只需在对应分组末尾添加一行
 
 # AI/小爱
-/system/product/app/XiaoaiRecommendation|XiaoaiRecommendation(小爱推荐)|com.xiaomi.aireco|AI/小爱
-/system/product/app/VoiceAssistAndroidT|超级小爱|com.miui.voiceassist|AI/小爱
-/system/product/app/VoiceTrigger|语音唤醒|com.miui.voicetrigger|AI/小爱
-/system/product/app/AiasstVision|翻译|com.xiaomi.aiasst.vision|AI/小爱
-/system/product/app/MIUIAiasstService|AI通话|com.xiaomi.aiasst.service|AI/小爱
-/system/product/priv-app/MIUIAICR|小米澎湃AI引擎|com.xiaomi.aicr|AI/小爱
+/system/product/app/XiaoaiRecommendation|XiaoaiRecommendation(小爱推荐)|com.xiaomi.aireco|AI/小爱|3
+/system/product/app/VoiceAssistAndroidT;/product/priv-app/VoiceAssistAndroidT|超级小爱|com.miui.voiceassist|AI/小爱|3
+/system/product/app/VoiceTrigger|语音唤醒|com.miui.voicetrigger|AI/小爱|3
+/system/product/app/AiasstVision|翻译|com.xiaomi.aiasst.vision|AI/小爱|3
+/system/product/app/MIUIAiasstService|AI通话|com.xiaomi.aiasst.service|AI/小爱|3
+/system/product/priv-app/MIUIAICR|小米澎湃AI引擎|com.xiaomi.aicr|AI/小爱|3
 
 # 游戏中心
-/system/product/priv-app/MiGameCenterSDKService|游戏服务|com.xiaomi.gamecenter.sdk.service|游戏中心
-/system/product/priv-app/MiniGameService|小游戏服务|com.xiaomi.minigame|游戏中心
-/system/product/data-app/MIUIGameCenter|游戏中心|com.xiaomi.gamecenter|游戏中心
-/system/product/app/MiGameService_8550|游戏高能时刻|com.xiaomi.migameservice|游戏中心
+/system/product/priv-app/MiGameCenterSDKService|游戏服务|com.xiaomi.gamecenter.sdk.service|游戏中心|1
+/system/product/priv-app/MiniGameService|小游戏服务|com.xiaomi.minigame|游戏中心|1
 
 # 设备互联/生态
-/system/product/app/MIUICloudService|小米云服务|com.miui.cloudservice|设备互联/生态
-/system/product/app/MIUIMiCloudSync|MiCloudSync(小米云同步)|com.miui.micloudsync|设备互联/生态
-/system/product/priv-app/MIUICloudBackup|小米云备份|com.miui.cloudbackup|设备互联/生态
-/system/product/priv-app/MirrorOS3|跨屏协同服务|com.xiaomi.mirror|设备互联/生态
-/system/product/app/CarWith|CarWith(小米汽车互联)|com.miui.carlink|设备互联/生态
-/system/product/app/MIS|小米汽车互联服务|com.xiaomi.mis|设备互联/生态
-/system/product/app/MiLinkOS3Cn|互联互通|com.milink.service|设备互联/生态
-/system/product/app/MiConnectService|互联通信服务|com.xiaomi.mi_connect_service|设备互联/生态
-/system_ext/app/digitalkey|数字钥匙|com.xiaomi.digitalkey|设备互联/生态
-/product/app/RideModeAudio|骑行模式|com.qualcomm.qti.ridemodeaudio|设备互联/生态
+/system/product/app/MIUICloudService|小米云服务|com.miui.cloudservice|设备互联/生态|2
+/system/product/app/MIUIMiCloudSync|MiCloudSync(小米云同步)|com.miui.micloudsync|设备互联/生态|2
+/system/product/priv-app/MIUICloudBackup|小米云备份|com.miui.cloudbackup|设备互联/生态|2
+/system/product/priv-app/MirrorOS3;/product/priv-app/MirrorOS4|跨屏协同服务|com.xiaomi.mirror|设备互联/生态|2
+/system/product/app/CarWith|CarWith(小米汽车互联)|com.miui.carlink|设备互联/生态|2
+/system/product/app/MIS|小米汽车互联服务|com.xiaomi.mis|设备互联/生态|2
+/system/product/app/MiLinkOS3Cn;/product/app/MiLinkOS4Cn|互联互通|com.milink.service|设备互联/生态|2
+/system/product/app/MiConnectService;/product/app/mi_connect_service|互联通信服务|com.xiaomi.mi_connect_service|设备互联/生态|2
 
 # 广告/追踪
-/system/product/app/MSA|智能服务|com.miui.systemAdSolution|广告/追踪
-/system/product/app/SecurityOnetrackService|SecurityOnetrackService(安全追踪服务)|com.xiaomi.security.onetrack|广告/追踪
-/system/product/app/AnalyticsCore|AnalyticsCore|com.miui.analytics|广告/追踪
+/system/product/app/AnalyticsCore|AnalyticsCore|com.miui.analytics|广告/追踪|1
+apex:com.android.adservices.api|广告隐私权|com.android.adservices.api|广告/追踪|1
 
 # 内容/工具/安全
-/system/product/priv-app/MIUIPersonalAssistantPhoneOS3|智能助理|com.miui.personalassistant|内容/工具/安全
-/system/product/priv-app/MiuiBarrage|弹幕通知|com.xiaomi.barrage|内容/工具/安全
-/system/product/priv-app/MIUIContentExtension|传送门|com.miui.contentextension|内容/工具/安全
-/product/app/MiBugReportOS3|用户反馈|com.miui.bugreport|内容/工具/安全
-/product/priv-app/MIUIYellowPage|黄页|com.miui.yellowpage|内容/工具/安全
-/product/app/ThirdAppAssistant|三方应用异常分析|com.miui.thirdappassistant|内容/工具/安全
-/product/app/ContentCatcherOS3_1|Application Extension Service(应用扩展服务)|com.miui.contentcatcher|内容/工具/安全
-/product/app/MIUITouchAssistant|悬浮球|com.miui.touchassistant|内容/工具/安全
+/system/product/priv-app/MIUIPersonalAssistantPhoneOS3;/product/priv-app/MIUIPersonalAssistantPhoneOS4|智能助理|com.miui.personalassistant|内容/工具/安全|3
+/system/product/priv-app/MiuiBarrage|弹幕通知|com.xiaomi.barrage|内容/工具/安全|3
+/system/product/priv-app/MIUIContentExtension|传送门|com.miui.contentextension|内容/工具/安全|3
+/product/app/MiBugReportOS3;/product/app/MiBugReportOS4|用户反馈|com.miui.bugreport|内容/工具/安全|3
+/product/priv-app/MIUIYellowPage|黄页|com.miui.yellowpage|内容/工具/安全|3
+/product/app/ThirdAppAssistant|三方应用异常分析|com.miui.thirdappassistant|内容/工具/安全|3
+/product/app/ContentCatcherOS3_1;/product/app/ContentCatcherOS4|Application Extension Service(应用扩展服务)|com.miui.contentcatcher|内容/工具/安全|3
+/product/app/MIUITouchAssistant|悬浮球|com.miui.touchassistant|内容/工具/安全|3
 
 # 系统服务
-/system/product/data-app/DownloadProviderUi|下载管理|com.android.providers.downloads.ui|系统服务
-/system/product/data-app/MiuiScanner|扫一扫|com.xiaomi.scanner|系统服务
-/system/priv-app/BuiltInPrintService|系统打印服务|com.android.bips|系统服务
-/system/system_ext/app/MiuiPrintSpooler|打印处理服务|com.android.printspooler|系统服务
-/system/priv-app/ManagedProvisioning|工作设置|com.android.managedprovisioning|系统服务
-/system/product/app/WMService|WMService(窗口管理)|com.miui.wmsvc|系统服务
-/system/product/app/MIUIReporter|UI信息工具|com.miui.uireporter|系统服务
-/system/product/priv-app/AutoRegistration|运营商服务|com.xiaomi.registration|系统服务
-/system/product/priv-app/RegService|注册服务|com.miui.dmregservice|系统服务
-/system/system_ext/app/MiSightService|系统质量监测|com.miui.misightservice|系统服务
-/system/system_ext/app/MiuiDaemon|系统质量服务|com.miui.daemon|系统服务
-/system/system_ext/app/VsimCore|MConnService(虚拟SIM)|com.miui.vsimcore|系统服务
-/system/system_ext/priv-app/EmergencyInfo|急救信息|com.android.emergency|系统服务
-/system/system_ext/priv-app/PowerInsight|powerinsight(功耗分析)|com.miui.powerinsight|系统服务
-/system/system_ext/priv-app/com.qualcomm.qti.services.systemhelper|System Helper Service(系统助手)|com.qualcomm.qti.services.systemhelper|系统服务
-/system/priv-app/SystemHelper|SystemHelper|com.mobiletools.systemhelper|系统服务
-/system/product/priv-app/MetokNLP|网络位置服务|com.xiaomi.metoknlp|系统服务
-/system/product/priv-app/MIUIQuickSearchBox|搜索|com.android.quicksearchbox|系统服务
-/system/app/Stk|USIM卡应用|com.android.stk|系统服务
-/system/app/CarrierDefaultApp|运营商通知|com.android.carrierdefaultapp|系统服务
-/system/priv-app/CallLogBackup|Call Log Backup/Restore(通话记录备份)|com.android.calllogbackup|系统服务
-/product/app/CatchLog|日志抓取|com.bsp.catchlog|系统服务
-/system_ext/priv-app/TouchService|触摸轨迹服务|com.xiaomi.touchservice|系统服务
+/system/product/data-app/DownloadProviderUi|下载管理|com.android.providers.downloads.ui|系统服务|3
+/system/priv-app/BuiltInPrintService|系统打印服务|com.android.bips|系统服务|3
+/system/system_ext/app/MiuiPrintSpooler|打印处理服务|com.android.printspooler|系统服务|3
+/system/priv-app/ManagedProvisioning|工作设置|com.android.managedprovisioning|系统服务|3
+/system/system_ext/app/MiSightService;/product/app/MiSightServiceCn|系统质量监测|com.miui.misightservice|系统服务|3
+/system/system_ext/priv-app/EmergencyInfo|急救信息|com.android.emergency|系统服务|3
+/system/system_ext/priv-app/PowerInsight|powerinsight(功耗分析)|com.miui.powerinsight|系统服务|3
+/system/system_ext/priv-app/com.qualcomm.qti.services.systemhelper|System Helper Service(系统助手)|com.qualcomm.qti.services.systemhelper|系统服务|3
+/system/priv-app/com.mobiletools.systemhelper;/system/priv-app/SystemHelper|SystemHelper|com.mobiletools.systemhelper|系统服务|3
+/system/product/priv-app/MetokNLP|网络位置服务|com.xiaomi.metoknlp|系统服务|3
+/system/product/priv-app/MIUIQuickSearchBox|搜索|com.android.quicksearchbox|系统服务|3
+/system/app/Stk|USIM卡应用|com.android.stk|系统服务|3
+/product/app/CatchLog|日志抓取|com.bsp.catchlog|系统服务|3
+/system_ext/priv-app/TouchService|触摸轨迹服务|com.xiaomi.touchservice|系统服务|3
+apex:com.android.healthconnect.controller|健康数据共享|com.android.healthconnect.controller|系统服务|3
 
 # 无障碍/宏
-/system/product/app/SwitchAccess|开关控制|com.google.android.accessibility.switchaccess|无障碍/宏
-/system/product/app/com.xiaomi.macro|自动连招|com.xiaomi.macro|无障碍/宏
-/system/product/app/com.xiaomi.ugd|GPU 驱动更新|com.xiaomi.ugd|无障碍/宏
+/system/product/app/SwitchAccess|开关控制|com.google.android.accessibility.switchaccess|无障碍/宏|3
+/system/product/app/com.xiaomi.macro|自动连招|com.xiaomi.macro|无障碍/宏|3
+/system/product/app/com.xiaomi.ugd|GPU 驱动更新|com.xiaomi.ugd|无障碍/宏|3
 
 # 危险项
-/system/product/app/NQNfcNci|NFC服务|com.android.nfc|危险项
-/system/product/app/MIUIGuardProvider|系统安全组件|com.miui.guardprovider|危险项
-/system/product/app/SogouIME|搜狗输入法小米版|com.sohu.inputmethod.sogou.xiaomi|危险项
-/data/app/iFlytekIME|讯飞输入法|com.iflytek.inputmethod.miui|危险项
-/system/priv-app/CellBroadcastServiceModulePlatform|Cell Broadcast Service(紧急警报)|com.android.cellbroadcastservice|危险项
-/system/product/app/MINextpay|小米智能卡网页组件|com.miui.nextpay|危险项
-/system/product/app/MITSMClient|小米智能卡|com.miui.tsmclient|危险项
-/system/product/app/PaymentService|米币支付|com.xiaomi.payment|危险项
-/system/product/app/MIUISuperMarket_M2_M3|应用商店|com.xiaomi.market|危险项
-apex:com.android.adservices.api|广告隐私权|com.android.adservices.api|广告/追踪
-apex:com.android.healthconnect.controller|健康数据共享|com.android.healthconnect.controller|系统服务
+/system/product/app/NQNfcNci;/system/app/NQNfcNci|NFC服务|com.android.nfc|危险项|0|精简后门禁卡、公交卡、付款功能可能失效
+/system/product/app/MIUIGuardProvider|系统安全组件|com.miui.guardprovider|危险项|0|精简后可能影响应用安全检测
+/system/product/app/SogouIME|搜狗输入法小米版|com.sohu.inputmethod.sogou.xiaomi|危险项|0|请确保已安装其他输入法，否则无法输入文字
+/system/priv-app/CellBroadcastServiceModulePlatform|Cell Broadcast Service(紧急警报)|com.android.cellbroadcastservice|危险项|0|精简后收不到地震、灾害等紧急预警通知
+/system/product/app/MINextpay|小米智能卡网页组件|com.miui.nextpay|危险项|0|精简后NFC公交卡、门禁卡、付款功能可能会失效
+/system/product/app/MITSMClient|小米智能卡|com.miui.tsmclient|危险项|0|精简后NFC公交卡、门禁卡、付款功能可能会失效
+/system/product/app/PaymentService|米币支付|com.xiaomi.payment|危险项|0|精简后米币相关支付功能失效
+/system/product/app/MIUISuperMarket_M2_M3;/product/app/MIUISuperMarket|应用商店|com.xiaomi.market|危险项|0|精简后无法通过官方商店下载应用
+/system/product/data-app/MIUIGameCenter|游戏中心|com.xiaomi.gamecenter|游戏中心|1
+/system/product/app/MiGameService_8550|游戏高能时刻|com.xiaomi.migameservice|游戏中心|1
+/system_ext/app/digitalkey|数字钥匙|com.xiaomi.digitalkey|设备互联/生态|2
+/product/app/RideModeAudio|骑行模式|com.qualcomm.qti.ridemodeaudio|设备互联/生态|2
+/system/product/app/MSA|智能服务|com.miui.systemAdSolution|广告/追踪|1
+/system/product/app/SecurityOnetrackService|SecurityOnetrackService(安全追踪服务)|com.xiaomi.security.onetrack|广告/追踪|1
+/system/product/data-app/MiuiScanner|扫一扫|com.xiaomi.scanner|系统服务|3
+/system/product/app/WMService|WMService(窗口管理)|com.miui.wmsvc|系统服务|3
+/system/product/app/MIUIReporter|UI信息工具|com.miui.uireporter|系统服务|3
+/system/product/priv-app/AutoRegistration|运营商服务|com.xiaomi.registration|系统服务|3
+/system/product/priv-app/RegService|注册服务|com.miui.dmregservice|系统服务|3
+/system/system_ext/app/MiuiDaemon|系统质量服务|com.miui.daemon|系统服务|3
+/system/system_ext/app/VsimCore|MConnService(虚拟SIM)|com.miui.vsimcore|系统服务|3
+/system/app/CarrierDefaultApp|运营商通知|com.android.carrierdefaultapp|系统服务|3
+/system/priv-app/CallLogBackup|Call Log Backup/Restore(通话记录备份)|com.android.calllogbackup|系统服务|3
+pm:com.iflytek.inputmethod.miui|讯飞输入法|com.iflytek.inputmethod.miui|危险项|0|精简前请先安装其他输入法，否则无法输入文字

@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
-LATESTARTSERVICE=false
-POSTFSDATA=false
+LATESTARTSERVICE=true
+POSTFSDATA=true
 PROPFILE=false
 SKIPMOUNT=false
 
@@ -14,7 +14,7 @@ print_modname() {
   [ -z "$version" ] && version="unknown"
   ui_print " "
   ui_print "=================================="
-  ui_print "  📦 HyperOS3 终极精简模块 $version"
+  ui_print "  📦 HyperOS 终极精简模块 $version"
   ui_print "  👤 作者：温柔浩"
   ui_print "=================================="
   ui_print " "
@@ -56,9 +56,72 @@ $pkg"
   done
 }
 
+# 检测并移除旧版模块（模块 id 由 HyperOS3_Debloat 变更为 HyperOS_Debloat）
+OLD_ID="HyperOS3_Debloat"
+OLD_DIR="/data/adb/modules/$OLD_ID"
+if [ -d "$OLD_DIR" ]; then
+  ui_print " "
+  ui_print "  ⚠️ 检测到旧版模块：$OLD_ID"
+  ui_print "  🔄 正在恢复旧版精简过的应用并移除旧模块..."
+  if [ -f "$OLD_DIR/uninstall.sh" ]; then
+    MODID="$OLD_ID" sh "$OLD_DIR/uninstall.sh" >/dev/null 2>&1
+  fi
+  # 旧脚本可能因 stdin 重定向问题恢复失败，这里按其记录文件兜底再恢复一次
+  for _rf in .data_apps_removed .apex_apps_removed .pm_removed; do
+    [ -f "$OLD_DIR/$_rf" ] || continue
+    while IFS= read -r _pkg; do
+      [ -n "$_pkg" ] && pm install-existing --user 0 "$_pkg" < /dev/null >/dev/null 2>&1
+    done < "$OLD_DIR/$_rf"
+  done
+  rm -rf "$OLD_DIR"
+  if [ -d "$OLD_DIR" ]; then
+    ui_print "  ❌ 无法自动移除旧版模块"
+    ui_print "  👉 请先在管理器中卸载旧版，再重新安装本模块"
+    abort "! 安装中止：请先卸载旧版模块"
+  fi
+  ui_print "  ✅ 旧版模块已移除"
+  ui_print " "
+fi
+
 # 解压数据文件
 unzip -o "$ZIPFILE" -d "$MODPATH" 2>/dev/null
 . $MODPATH/pkg_map.sh
+
+# 按候选路径加入精简列表（自动解析真实分区路径）
+add_candidate() {
+  local real=$(resolve_path "$1")
+  case "$real" in
+    apex:*|pm:*) add_apex_app "${real#*:}" ;;
+    *) add_to_replace "$real" ;;
+  esac
+}
+
+# 按候选路径从精简列表移除
+remove_candidate() {
+  local real=$(resolve_path "$1")
+  case "$real" in
+    apex:*|pm:*)
+      APEX_APPS=$(echo "$APEX_APPS" | grep -vxF "${real#*:}")
+      ;;
+    *)
+      REPLACE=$(echo "$REPLACE" | grep -vxF "$real")
+      ;;
+  esac
+}
+
+# 按 apps.db 的模式列生成精简列表
+# 参数：最大模式（1/2/3）
+apply_mode() {
+  local max_level="$1"
+  while IFS= read -r line; do
+    local lvl=$(row_level "$line")
+    case "$lvl" in ''|*[!0-9]*) continue ;; esac
+    [ "$lvl" -ge 1 ] && [ "$lvl" -le "$max_level" ] || continue
+    add_candidate "$(cfg_field "$line" 1)"
+  done <<EOF
+$(cfg_rows)
+EOF
+}
 
 # 卸载 REPLACE 应用的 data 分区副本（防止用户更新过的应用绕过精简）
 uninstall_replace_apps() {
@@ -67,7 +130,7 @@ uninstall_replace_apps() {
   for item in $REPLACE; do
     local pkg=$(get_pkg_name "$item")
     [ -z "$pkg" ] && continue
-    if pm uninstall -k --user 0 "$pkg" >/dev/null 2>&1; then
+    if pm uninstall -k --user 0 "$pkg" < /dev/null >/dev/null 2>&1; then
       echo "$pkg" >> "$record_file"
     fi
   done
@@ -78,40 +141,30 @@ generate_apps_conf() {
   local conf="$MODPATH/webroot/apps.conf"
   local old_conf="/data/adb/modules/$MODID/webroot/apps.conf"
   mkdir -p "$MODPATH/webroot"
-  echo "# HyperOS3 Debloat 配置" > "$conf"
-  echo "# 格式：路径|显示名|包名|状态（1=精简 0=保留）|分组" >> "$conf"
+  conf_header "$conf"
 
-  # 记录 apps.db 中的路径
-  local db_paths=""
+  # apps.db 中的包名（用于自定义应用去重）
+  local db_pkgs=$(db_pkg_list)
   local line
   while IFS= read -r line; do
-    case "$line" in \#*|"") continue ;; esac
-    local path=$(echo "$line" | cut -d'|' -f1)
-    local display=$(echo "$line" | cut -d'|' -f2)
-    local pkg=$(echo "$line" | cut -d'|' -f3)
-    local group=$(echo "$line" | cut -d'|' -f4)
-    db_paths="$db_paths
-$path"
+    local pkg=$(cfg_field "$line" 3)
     local status=0
-    echo "$REPLACE" | grep -qxF "$path" && status=1
-    # APEX 应用检查
-    case "$path" in apex:*)
-      local apex_pkg="${path#apex:}"
-      echo "$APEX_APPS" | grep -qxF "$apex_pkg" && status=1
-    ;; esac
-    echo "$path|$display|$pkg|$status|$group" >> "$conf"
-  done < "$APPS_DB"
+    local real=$(resolve_path "$(cfg_field "$line" 1)")
+    case "$real" in
+      apex:*|pm:*)
+        echo "$APEX_APPS" | grep -qxF "$pkg" && status=1
+        ;;
+      *)
+        echo "$REPLACE" | grep -qxF "$real" && status=1
+        ;;
+    esac
+    conf_emit "$line" "$status" >> "$conf"
+  done <<EOF
+$(cfg_rows)
+EOF
 
-  # 保留旧 apps.conf 中的自定义应用（不在 apps.db 中的）
-  if [ -f "$old_conf" ]; then
-    while IFS='|' read -r _p _n _pkg _st _g; do
-      [ -z "$_p" ] && continue; case "$_p" in \#*) continue ;; esac
-      case "$db_paths" in
-        *"$_p"*) continue ;;
-      esac
-      echo "$_p|$_n|$_pkg|$_st|$_g" >> "$conf"
-    done < "$old_conf"
-  fi
+  # 保留旧 apps.conf 中的自定义应用（按包名精确去重）
+  conf_append_custom "$old_conf" "$db_pkgs" >> "$conf"
 }
 
 # 记录 REPLACE 目录（供 post-fs-data.sh 清理）
@@ -119,7 +172,7 @@ record_replace_dirs() {
   local record="$MODPATH/.debloat_record"
   : > "$record"
   for item in $REPLACE; do
-    echo "$MODPATH/$item" >> "$record"
+    echo "$MODPATH$(module_rel "$item")" >> "$record"
   done
 }
 
@@ -128,7 +181,7 @@ do_uninstall_apex() {
   [ -z "$APEX_APPS" ] && return
   : > "$MODPATH/.apex_apps_removed"
   for pkg in $APEX_APPS; do
-    if pm uninstall -k --user 0 "$pkg" >/dev/null 2>&1; then
+    if pm uninstall -k --user 0 "$pkg" < /dev/null >/dev/null 2>&1; then
       echo "$pkg" >> "$MODPATH/.apex_apps_removed"
     fi
   done
@@ -227,165 +280,49 @@ custom_mode() {
     # 跳过危险项（由 dangerous_items 处理）
     [ "$group_name" = "危险项" ] && continue
 
-    local group_apps=$(get_apps_by_group "$group_name")
-
-    # 生成描述文字
-    local desc=""
-    for app_path in $group_apps; do
-      local dname=$(get_display_name "$app_path")
-      [ -n "$desc" ] && desc="${desc}+"
-      desc="${desc}${dname}"
-    done
-
     ui_print " "
     ui_print " 📦 [${group_idx}/${total_groups}] ${group_name}"
-    ui_print "   包含：${desc}"
     ui_print "   🔊音量+ 精简此组 / 🔊音量- 进入选择"
 
     if getVolumeKey; then
       ui_print "   ❌ 精简此组"
-      for app_path in $group_apps; do
-        case "$app_path" in
-          apex:*) add_apex_app "${app_path#apex:}" ;;
-          *) add_to_replace "$app_path" ;;
-        esac
-      done
+      while IFS= read -r _line; do
+        [ "$(cfg_field "$_line" 4)" = "$group_name" ] || continue
+        add_candidate "$(cfg_field "$_line" 1)"
+      done <<EOF
+$(cfg_rows)
+EOF
     else
-      # 构建 custom_group 参数：路径1 名称1 路径2 名称2 ...
-      local group_args=""
-      for app_path in $group_apps; do
-        local dname=$(get_display_name "$app_path")
-        group_args="$group_args $app_path $dname"
-      done
-
-      # 系统服务使用快捷选择模式
-      if [ "$group_name" = "系统服务" ]; then
-        custom_group_with_shortcut "$group_name" $group_args
-        # apex 应用单独处理
-        ui_print " "
-        ui_print "   健康数据共享（apex）"
-        ui_print "     🔊音量+ 精简 / 🔊音量- 保留"
-        if getVolumeKey; then
-          add_apex_app "com.android.healthconnect.controller"
-          ui_print "     ❌ 精简（apex）"
-        else
-          ui_print "     ✅ 保留"
-        fi
-      elif [ "$group_name" = "广告/追踪" ]; then
-        custom_group "$group_name" $group_args
-        # apex 应用单独处理
-        ui_print " "
-        ui_print "   广告隐私权（apex）"
-        ui_print "     🔊音量+ 精简 / 🔊音量- 保留"
-        if getVolumeKey; then
-          add_apex_app "com.android.adservices.api"
-          ui_print "     ❌ 精简（apex）"
-        else
-          ui_print "     ✅ 保留"
-        fi
-      else
-        custom_group "$group_name" $group_args
-      fi
+      custom_group "$group_name"
     fi
   done
 }
 
-# 自定义模式：逐个应用选择（兼容 sh，支持重选本组）
-# 参数：分组名 应用路径1 应用名1 应用路径2 应用名2 ...
+# 自定义模式：列出分组内应用并选择
+# 参数：分组名
 custom_group() {
   local group_name="$1"
-  shift
-  local total=$(( $# / 2 ))
-  local all_args="$*"
-  local retry=true
+  local items="$MODPATH/.custom_items"
+  : > "$items"
+  while IFS= read -r _line; do
+    [ "$(cfg_field "$_line" 4)" = "$group_name" ] || continue
+    echo "$(cfg_field "$_line" 1)|$(cfg_field "$_line" 2)" >> "$items"
+  done <<EOF
+$(cfg_rows)
+EOF
+  local total=$(wc -l < "$items")
 
-  while $retry; do
-    retry=false
-    local i=1
-    local group_selected=""
-    local args="$all_args"
-
-    ui_print " "
-    ui_print " 📦 ${group_name} - 逐个选择"
-    ui_print "   🔊音量+ 精简 / 🔊音量- 保留"
-
-    # 逐项选择
-    while [ -n "$args" ]; do
-      local app_path=$(echo "$args" | cut -d' ' -f1)
-      local app_name=$(echo "$args" | cut -d' ' -f2)
-      args=$(echo "$args" | cut -d' ' -f3-)
-
-      ui_print " "
-      ui_print "   [${i}/${total}] ${app_name}"
-
-      if getVolumeKey; then
-        case "$app_path" in
-          apex:*) add_apex_app "${app_path#apex:}" ;;
-          *) add_to_replace "$app_path" ;;
-        esac
-        group_selected="$group_selected $app_path"
-        ui_print "     ❌ 精简"
-      else
-        ui_print "     ✅ 保留"
-      fi
-      i=$((i + 1))
-    done
-
-    # 显示本组结果
-    ui_print " "
-    ui_print " 📦 ${group_name} - 已选择："
-    local display_args="$all_args"
-    while [ -n "$display_args" ]; do
-      local d_path=$(echo "$display_args" | cut -d' ' -f1)
-      local d_name=$(echo "$display_args" | cut -d' ' -f2)
-      display_args=$(echo "$display_args" | cut -d' ' -f3-)
-      if echo "$group_selected" | grep -q "$d_path"; then
-        ui_print "   ❌ $d_name"
-      else
-        ui_print "   ✅ $d_name"
-      fi
-    done
-
-    # 确认/重选
-    ui_print " "
-    ui_print " 🔊音量+ 确认 / 🔊音量- 重选本组"
-    if ! getVolumeKey; then
-      # 重选：从 REPLACE 中移除本组已选
-      for p in $group_selected; do
-        REPLACE=$(echo "$REPLACE" | grep -vxF "$p")
-      done
-      retry=true
-    fi
-  done
-
-  ui_print " "
-  ui_print " 📦 ${group_name} - 选择完成"
-}
-
-# 自定义模式：带快捷选项的应用选择（兼容 sh）
-# 参数：分组名 应用路径1 应用名1 应用路径2 应用名2 ...
-custom_group_with_shortcut() {
-  local group_name="$1"
-  shift
-  local total=$(( $# / 2 ))
-  local opt=1
-  local all_args="$@"
-
-  # 先显示本组应用列表
   ui_print " "
   ui_print " 📦 ${group_name}（${total}项）"
-  local _show_args="$all_args"
-  while [ -n "$_show_args" ]; do
-    local _s_name=$(echo "$_show_args" | cut -d' ' -f2)
-    ui_print "   · $_s_name"
-    _show_args=$(echo "$_show_args" | cut -d' ' -f3-)
-  done
+  while IFS='|' read -r _c _n; do
+    ui_print "   · $_n"
+  done < "$items"
 
-  ui_print " "
-  ui_print " 📦 ${group_name} - 选择方式"
-  ui_print "   🔊音量+ 确认 / 🔊音量- 切换"
-
+  local opt=1
   while true; do
+    ui_print " "
+    ui_print " 📦 ${group_name} - 选择方式"
+    ui_print "   🔊音量+ 确认 / 🔊音量- 切换"
     case $opt in
       1) ui_print "   [1] ❌ 全部精简" ;;
       2) ui_print "   [2] ✅ 全部保留" ;;
@@ -396,33 +333,84 @@ custom_group_with_shortcut() {
       case $opt in
         1)
           ui_print "   ❌ 全部精简"
-          local _path=""
-          local _name=""
-          local _args="$all_args"
-          while [ -n "$_args" ]; do
-            _path=$(echo "$_args" | cut -d' ' -f1)
-            _name=$(echo "$_args" | cut -d' ' -f2)
-            case "$_path" in
-              apex:*) add_apex_app "${_path#apex:}" ;;
-              *) add_to_replace "$_path" ;;
-            esac
-            _args=$(echo "$_args" | cut -d' ' -f3-)
-          done
+          while IFS='|' read -r _c _n; do
+            add_candidate "$_c"
+            ui_print "     ❌ $_n"
+          done < "$items"
           ;;
         2)
           ui_print "   ✅ 全部保留"
           ;;
         3)
           ui_print "   🔧 逐个选择"
-          custom_group "$group_name" $all_args
+          custom_group_one_by_one "$group_name" "$items" "$total"
           ;;
       esac
-      return
-    else
-      opt=$((opt + 1))
-      [ $opt -gt 3 ] && opt=1
+      break
+    fi
+    opt=$((opt + 1))
+    [ $opt -gt 3 ] && opt=1
+  done
+  rm -f "$items"
+}
+
+# 自定义模式：逐个应用选择（支持重选本组）
+# 参数：分组名 项目文件 总数
+custom_group_one_by_one() {
+  local group_name="$1"
+  local items="$2"
+  local total="$3"
+  local retry=true
+
+  while $retry; do
+    retry=false
+    local i=0
+    local selected=""
+
+    ui_print " "
+    ui_print " 📦 ${group_name} - 逐个选择"
+    ui_print "   🔊音量+ 精简 / 🔊音量- 保留"
+
+    while IFS='|' read -r _c _n; do
+      i=$((i + 1))
+      ui_print " "
+      ui_print "   [${i}/${total}] ${_n}"
+      if getVolumeKey; then
+        add_candidate "$_c"
+        selected="$selected
+$_c"
+        ui_print "     ❌ 精简"
+      else
+        ui_print "     ✅ 保留"
+      fi
+    done < "$items"
+
+    # 显示本组结果
+    ui_print " "
+    ui_print " 📦 ${group_name} - 已选择："
+    while IFS='|' read -r _c _n; do
+      if echo "$selected" | grep -qxF "$_c"; then
+        ui_print "   ❌ $_n"
+      else
+        ui_print "   ✅ $_n"
+      fi
+    done < "$items"
+
+    # 确认/重选
+    ui_print " "
+    ui_print " 🔊音量+ 确认 / 🔊音量- 重选本组"
+    if ! getVolumeKey; then
+      while IFS= read -r _s; do
+        [ -n "$_s" ] && remove_candidate "$_s"
+      done <<EOF
+$selected
+EOF
+      retry=true
     fi
   done
+
+  ui_print " "
+  ui_print " 📦 ${group_name} - 选择完成"
 }
 
 # 危险项确认
@@ -432,87 +420,23 @@ dangerous_items() {
   ui_print "  ⚠️ 危险项确认（可跳过）"
   ui_print " ============================================"
 
-  ui_print " "
-  ui_print "  📱 NFC服务 - 门禁/公交卡/付款可能失效"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/product/app/NQNfcNci"
-    ui_print "  ❌ 精简NFC"
-  else
-    ui_print "  ✅ 保留NFC"
-  fi
-
-  ui_print " "
-  ui_print "  🛡️ 系统安全组件 - 可能影响兼容性"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/product/app/MIUIGuardProvider"
-    ui_print "  ❌ 精简安全组件"
-  else
-    ui_print "  ✅ 保留安全组件"
-  fi
-
-  ui_print " "
-  ui_print "  ⌨️ 搜狗输入法小米版 - 请确保有其他输入法"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/product/app/SogouIME"
-    ui_print "  ❌ 精简搜狗输入法"
-  else
-    ui_print "  ✅ 保留搜狗输入法"
-  fi
-
-  ui_print " "
-  ui_print "  ⌨️ 讯飞输入法 - 请确保有其他输入法"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/data/app/iFlytekIME"
-    ui_print "  ❌ 精简讯飞输入法"
-  else
-    ui_print "  ✅ 保留讯飞输入法"
-  fi
-
-  ui_print " "
-  ui_print "  📡 Cell Broadcast Service(紧急警报) - 紧急警报服务"
-  ui_print "  ⚠️ 精简后收不到地震/灾害预警"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/priv-app/CellBroadcastServiceModulePlatform"
-    ui_print "  ❌ 精简紧急警报"
-  else
-    ui_print "  ✅ 保留紧急警报"
-  fi
-
-  ui_print " "
-  ui_print "  💳 小米智能卡 - NFC公交卡/门禁/付款"
-  ui_print "  ⚠️ 精简后门禁/公交卡/付款全部失效"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/product/app/MINextpay" "/system/product/app/MITSMClient"
-    ui_print "  ❌ 精简智能卡"
-  else
-    ui_print "  ✅ 保留智能卡"
-  fi
-
-  ui_print " "
-  ui_print "  💰 米币支付 - 小米支付服务"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/product/app/PaymentService"
-    ui_print "  ❌ 精简米币支付"
-  else
-    ui_print "  ✅ 保留米币支付"
-  fi
-
-  ui_print " "
-  ui_print "  🛒 应用商店 - 应用下载"
-  ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
-  if getVolumeKey; then
-    add_to_replace "/system/product/app/MIUISuperMarket_M2_M3"
-    ui_print "  ❌ 精简应用商店"
-  else
-    ui_print "  ✅ 保留应用商店"
-  fi
+  while IFS= read -r _line; do
+    [ "$(cfg_field "$_line" 4)" = "危险项" ] || continue
+    local _name=$(cfg_field "$_line" 2)
+    local _warn=$(cfg_field "$_line" 6)
+    [ -z "$_warn" ] && _warn="精简后可能影响相关功能"
+    ui_print " "
+    ui_print "  ⚠️ ${_name} - ${_warn}"
+    ui_print "  🔊音量+ 精简 / 🔊音量- 保留"
+    if getVolumeKey; then
+      add_candidate "$(cfg_field "$_line" 1)"
+      ui_print "  ❌ 精简${_name}"
+    else
+      ui_print "  ✅ 保留${_name}"
+    fi
+  done <<EOF
+$(cfg_rows)
+EOF
 }
 
 # 主安装流程
@@ -530,15 +454,10 @@ on_install() {
     if getVolumeKey; then
       ui_print "  ✅ 应用旧配置"
       # 从旧配置中读取状态为1的应用
-      while IFS='|' read -r path name pkg status group; do
+      while IFS='|' read -r path name pkg status group mode warn; do
         [ -z "$path" ] && continue
         case "$path" in \#*) continue ;; esac
-        if [ "$status" = "1" ]; then
-          case "$path" in
-            apex:*) add_apex_app "${path#apex:}" ;;
-            *) add_to_replace "$path" ;;
-          esac
-        fi
+        [ "$status" = "1" ] && add_candidate "$path"
       done < "$old_conf"
       # 生成新配置（data 副本已在上次安装时卸载，REPLACE 会遮蔽系统版本）
       generate_apps_conf
@@ -586,112 +505,21 @@ on_install() {
       ui_print "  精简：广告追踪 + 游戏中心"
       ui_print "  保留：所有核心功能"
       ui_print " ============================================"
-      add_to_replace \
-        "/system/product/app/MSA" \
-        "/system/product/app/SecurityOnetrackService" \
-        "/system/product/app/AnalyticsCore" \
-        "/system/product/priv-app/MiGameCenterSDKService" \
-        "/system/product/priv-app/MiniGameService" \
-        "/system/product/data-app/MIUIGameCenter" \
-        "/system/product/app/MiGameService_8550"
-      add_apex_app "com.android.adservices.api"
+      apply_mode 1
       ;;
     2)
       ui_print "  ⚡ [OK] 标准精简"
       ui_print "  精简：广告追踪 + 游戏中心"
       ui_print "  +云服务/跨屏协同/汽车互联/互联互通"
       ui_print " ============================================"
-      add_to_replace \
-        "/system/product/app/MSA" \
-        "/system/product/app/SecurityOnetrackService" \
-        "/system/product/app/AnalyticsCore" \
-        "/system/product/priv-app/MiGameCenterSDKService" \
-        "/system/product/priv-app/MiniGameService" \
-        "/system/product/data-app/MIUIGameCenter" \
-        "/system/product/app/MiGameService_8550" \
-        "/system/product/app/MIUICloudService" \
-        "/system/product/app/MIUIMiCloudSync" \
-        "/system/product/priv-app/MIUICloudBackup" \
-        "/system/product/priv-app/MirrorOS3" \
-        "/system/product/app/CarWith" \
-        "/system/product/app/MIS" \
-        "/system/product/app/MiLinkOS3Cn" \
-        "/system/product/app/LyraWOS3CN" \
-        "/system/product/app/MiConnectService" \
-        "/system_ext/app/digitalkey" \
-        "/product/app/RideModeAudio"
-      add_apex_app "com.android.adservices.api"
+      apply_mode 2
       ;;
     3)
       ui_print "  🔥 [OK] 深度精简"
       ui_print "  精简：标准精简全部内容"
       ui_print "  +AI/小爱 + 内容/工具/安全 + 系统服务 + 无障碍/宏"
       ui_print " ============================================"
-      add_to_replace \
-        "/system/product/app/MSA" \
-        "/system/product/app/SecurityOnetrackService" \
-        "/system/product/app/AnalyticsCore" \
-        "/system/product/priv-app/MiGameCenterSDKService" \
-        "/system/product/priv-app/MiniGameService" \
-        "/system/product/data-app/MIUIGameCenter" \
-        "/system/product/app/MiGameService_8550" \
-        "/system/product/app/MIUICloudService" \
-        "/system/product/app/MIUIMiCloudSync" \
-        "/system/product/priv-app/MIUICloudBackup" \
-        "/system/product/priv-app/MirrorOS3" \
-        "/system/product/app/CarWith" \
-        "/system/product/app/MIS" \
-        "/system/product/app/MiLinkOS3Cn" \
-        "/system/product/app/LyraWOS3CN" \
-        "/system/product/app/MiConnectService" \
-        "/system_ext/app/digitalkey" \
-        "/product/app/RideModeAudio" \
-        "/system/product/app/XiaoaiRecommendation" \
-        "/system/product/app/VoiceAssistAndroidT" \
-        "/system/product/app/VoiceTrigger" \
-        "/system/product/app/AiasstVision" \
-        "/system/product/app/MIUIAiasstService" \
-        "/system/product/priv-app/MIUIAICR" \
-        "/system/product/priv-app/MIUIPersonalAssistantPhoneOS3" \
-        "/system/product/priv-app/MiuiBarrage" \
-        "/system/product/priv-app/MIUIContentExtension" \
-        "/product/app/MIGalleryLockscreen" \
-        "/product/app/MIUIMiDrive" \
-        "/product/app/MiBugReportOS3" \
-        "/product/app/hybrid" \
-        "/product/priv-app/MIUIYellowPage" \
-        "/product/app/ThirdAppAssistant" \
-        "/product/app/ContentCatcherOS3_1" \
-        "/product/app/MIUITouchAssistant" \
-        "/product/app/greenguard" \
-        "/system/product/data-app/DownloadProviderUi" \
-        "/system/product/data-app/MiuiScanner" \
-        "/system/priv-app/BuiltInPrintService" \
-        "/system/system_ext/app/MiuiPrintSpooler" \
-        "/system/priv-app/ManagedProvisioning" \
-        "/system/product/app/WMService" \
-        "/system/product/app/MIUIReporter" \
-        "/system/product/priv-app/AutoRegistration" \
-        "/system/product/priv-app/RegService" \
-        "/system/system_ext/app/MiSightService" \
-        "/system/system_ext/app/MiuiDaemon" \
-        "/system/system_ext/app/VsimCore" \
-        "/system/system_ext/priv-app/EmergencyInfo" \
-        "/system/system_ext/priv-app/PowerInsight" \
-        "/system/system_ext/priv-app/com.qualcomm.qti.services.systemhelper" \
-        "/system/priv-app/SystemHelper" \
-        "/system/product/priv-app/MetokNLP" \
-        "/system/product/priv-app/MIUIQuickSearchBox" \
-        "/system/app/Stk" \
-        "/system/app/CarrierDefaultApp" \
-        "/system/priv-app/CallLogBackup" \
-        "/product/priv-app/ConfigUpdater" \
-        "/product/app/CatchLog" \
-        "/system_ext/priv-app/TouchService" \
-        "/system/product/app/SwitchAccess" \
-        "/system/product/app/com.xiaomi.macro" \
-        "/system/product/app/com.xiaomi.ugd"
-      add_apex_app "com.android.adservices.api" "com.android.healthconnect.controller"
+      apply_mode 3
       ;;
     4)
       custom_mode
@@ -711,7 +539,7 @@ restore_data_apps() {
   local old_record="/data/adb/modules/$MODID/.data_apps_removed"
   if [ -f "$old_record" ]; then
     while IFS= read -r pkg; do
-      [ -n "$pkg" ] && pm install-existing --user 0 "$pkg" >/dev/null 2>&1
+      [ -n "$pkg" ] && pm install-existing --user 0 "$pkg" < /dev/null >/dev/null 2>&1
     done < "$old_record"
   fi
 
@@ -719,7 +547,7 @@ restore_data_apps() {
   local apex_record="/data/adb/modules/$MODID/.apex_apps_removed"
   if [ -f "$apex_record" ]; then
     while IFS= read -r pkg; do
-      [ -n "$pkg" ] && pm install-existing --user 0 "$pkg" >/dev/null 2>&1
+      [ -n "$pkg" ] && pm install-existing --user 0 "$pkg" < /dev/null >/dev/null 2>&1
     done < "$apex_record"
   fi
 }
@@ -727,6 +555,7 @@ restore_data_apps() {
 set_permissions() {
   set_perm_recursive $MODPATH 0 0 0755 0644
   # 确保 product 和 system_ext 目录有执行权限（兼容独立分区设备）
+  [ -d "$MODPATH/product" ] && set_perm_recursive $MODPATH/product 0 0 0755 0644
   [ -d "$MODPATH/system/product" ] && set_perm_recursive $MODPATH/system/product 0 0 0755 0644
   [ -d "$MODPATH/system/system_ext" ] && set_perm_recursive $MODPATH/system/system_ext 0 0 0755 0644
 }
