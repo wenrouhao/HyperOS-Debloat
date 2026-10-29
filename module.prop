@@ -1,6 +1,6 @@
 id=HyperOS_Debloat
 name=HyperOS 终极精简模块
-version=v5.0.0
-versionCode=16
+version=v5.0.1
+versionCode=17
 author=温柔浩
 description=HyperOS 3 / 4 通用精简模块 | 兼容 magic_mount_rs / mountify / Hybrid Mount / NoMount | 4种模式：快速/标准/深度/自定义 | 支持自定义精简应用

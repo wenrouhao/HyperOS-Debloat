@@ -4,18 +4,29 @@ umask 022
 OUTFD=$2
 ZIPFILE=$3
 
-ui_print() { echo "$1"; }
+# 输出到 TWRP 界面（$OUTFD），同时 echo 留档到 recovery 日志
+ui_print() {
+  echo "ui_print $1" >> /proc/self/fd/$OUTFD 2>/dev/null
+  echo "ui_print" >> /proc/self/fd/$OUTFD 2>/dev/null
+  echo "$1"
+}
+progress() { echo "progress $1 $2" >> /proc/self/fd/$OUTFD 2>/dev/null; }
 
-mount /data 2>/dev/null
 mount /data 2>/dev/null
 
 # 支持新旧模块名
 MODIDS="HyperOS_Debloat HyperOS3_Debloat"
 
 ui_print " "
-ui_print " HyperOS-Debloat 紧急清理包"
-ui_print " 用于卡米/卡锁屏时完整恢复"
+ui_print "======================================"
+ui_print "  HyperOS-Debloat 紧急清理包"
+ui_print "  用于卡米/卡锁屏时完整恢复"
+ui_print "======================================"
 ui_print " "
+progress 0.05 0
+
+# ========== 第 1 步：检测模块 ==========
+ui_print "[1/5] 检测模块..."
 
 FOUND=0
 ALL_RESTORE=""
@@ -25,13 +36,13 @@ for MODID in $MODIDS; do
   MODDIR_UPD="/data/adb/modules_update/$MODID"
   [ -d "$MODDIR" ] || [ -d "$MODDIR_UPD" ] || continue
   FOUND=1
+  ui_print "  发现模块：$MODID"
 
-  # 收集需要恢复的包名
+  # 收集需要恢复的包名（必须在删除模块目录之前）
   for f in .data_apps_removed .apex_apps_removed .pm_removed; do
     [ -f "$MODDIR/$f" ] && ALL_RESTORE="$ALL_RESTORE $(cat "$MODDIR/$f")"
+    [ -f "$MODDIR_UPD/$f" ] && ALL_RESTORE="$ALL_RESTORE $(cat "$MODDIR_UPD/$f")"
   done
-
-  ui_print " 检测到模块：$MODID"
 
   # 卸载模块相关挂载（防止 rm 残留）
   for d in $(find "$MODDIR" -type d 2>/dev/null | sort -r); do
@@ -40,21 +51,22 @@ for MODID in $MODIDS; do
   for d in $(find "$MODDIR_UPD" -type d 2>/dev/null | sort -r); do
     umount -l "$d" 2>/dev/null
   done
-
-  # 删除模块目录
-  rm -rf "$MODDIR"
-  rm -rf "$MODDIR_UPD"
 done
 
 if [ "$FOUND" = "0" ]; then
-  ui_print " 未检测到模块，无需清理"
+  ui_print "  未检测到模块"
   ui_print " "
+  ui_print "======================================"
+  ui_print "  无需清理，直接重启即可"
+  ui_print "======================================"
+  progress 1.0 0
   exit 0
 fi
+progress 0.25 0
 
-ui_print " 模块目录已清理"
+# ========== 第 2 步：整理恢复列表 ==========
+ui_print "[2/5] 整理待恢复应用列表..."
 
-# 去重恢复列表
 RESTORE_LIST=""
 for p in $ALL_RESTORE; do
   case " $RESTORE_LIST " in
@@ -64,43 +76,74 @@ for p in $ALL_RESTORE; do
 done
 
 TOTAL=$(echo $RESTORE_LIST | wc -w)
-[ "$TOTAL" -gt 0 ] && ui_print " 需恢复应用：$TOTAL 个"
+ui_print "  待恢复应用：$TOTAL 个"
+progress 0.40 0
 
-# 尝试 pm 恢复（部分 TWRP 支持）
-RESTORE_OK=0
+# ========== 第 3 步：删除模块目录 ==========
+ui_print "[3/5] 删除模块目录..."
+
+for MODID in $MODIDS; do
+  MODDIR="/data/adb/modules/$MODID"
+  MODDIR_UPD="/data/adb/modules_update/$MODID"
+  [ -d "$MODDIR" ] && rm -rf "$MODDIR" && ui_print "  已删除 modules/$MODID"
+  [ -d "$MODDIR_UPD" ] && rm -rf "$MODDIR_UPD" && ui_print "  已删除 modules_update/$MODID"
+done
+progress 0.60 0
+
+# ========== 第 4 步：安装开机恢复脚本 ==========
+ui_print "[4/5] 安装开机自动恢复脚本..."
+
+if [ "$TOTAL" -eq 0 ]; then
+  ui_print "  无待恢复应用，跳过"
+elif [ ! -d "/data/adb/service.d" ]; then
+  ui_print "  警告：service.d 不可用，无法自动恢复"
+  ui_print "  进系统后请在终端逐个执行："
+  ui_print "    pm install-existing --user 0 <包名>"
+else
+  RESTORE_SCRIPT="/data/adb/service.d/hyperos_debloat_restore.sh"
+  {
+    echo '#!/system/bin/sh'
+    echo '# HyperOS-Debloat 清理包生成的恢复脚本，执行完成后自删'
+    echo 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 5; done'
+    echo 'sleep 10'
+    echo 'LOG=/data/local/tmp/hyperos_debloat_restore.log'
+    echo 'TAG=HyperOSDebloat'
+    echo 'START=$(date +%s)'
+    echo 'echo "=== restore start $(date) ===" > $LOG'
+    echo 'log -t $TAG "restore start, total='$TOTAL'"'
+    echo 'OK=0; FAIL=0'
+    for pkg in $RESTORE_LIST; do
+      [ -z "$pkg" ] && continue
+      echo "if pm install-existing --user 0 $pkg </dev/null >/dev/null 2>&1; then OK=\$((OK+1)); echo \"OK   $pkg\" >> \$LOG; else FAIL=\$((FAIL+1)); echo \"FAIL $pkg\" >> \$LOG; fi"
+    done
+    echo 'ELAPSED=$(($(date +%s) - START))'
+    echo 'echo "=== restore done ok=$OK fail=$FAIL elapsed=${ELAPSED}s ===" >> $LOG'
+    echo 'log -t $TAG "restore done ok=$OK fail=$FAIL"'
+    echo 'if [ "$FAIL" -eq 0 ]; then'
+    echo '  MSG="精简应用恢复完成：成功 $OK 个"'
+    echo 'else'
+    echo '  MSG="恢复完成：成功 $OK 个，失败 $FAIL 个（见日志）"'
+    echo 'fi'
+    echo 'su 2000 sh -c "cmd notification post -t HyperOS-Debloat hyperos_debloat_restore \"$MSG\"" >/dev/null 2>&1'
+    echo 'rm -f /data/adb/service.d/hyperos_debloat_restore.sh'
+  } > "$RESTORE_SCRIPT"
+  chmod 755 "$RESTORE_SCRIPT"
+  ui_print "  恢复脚本已安装（开机后自动执行，完成自删）"
+fi
+progress 0.85 0
+
+# ========== 第 5 步：完成汇总 ==========
+ui_print "[5/5] 清理完成"
+ui_print " "
+ui_print "======================================"
+ui_print "  清理完成，请重启设备"
+ui_print " "
+ui_print "  已删除模块目录，遮蔽已解除"
 if [ "$TOTAL" -gt 0 ]; then
-  for pkg in $RESTORE_LIST; do
-    [ -z "$pkg" ] && continue
-    if pm install-existing --user 0 "$pkg" >/dev/null 2>&1; then
-      RESTORE_OK=$((RESTORE_OK + 1))
-    fi
-  done
+  ui_print "  开机后将自动恢复 $TOTAL 个应用"
+  ui_print "  恢复完成时会有系统通知提醒"
+  ui_print "  详细日志：/data/local/tmp/hyperos_debloat_restore.log"
 fi
-
-if [ "$RESTORE_OK" -gt 0 ]; then
-  ui_print " pm 恢复成功：$RESTORE_OK 个"
-fi
-
-# pm 不可用时，删除 package-restrictions.xml 让系统重建
-if [ "$TOTAL" -gt 0 ] && [ "$RESTORE_OK" -eq 0 ]; then
-  ui_print " "
-  ui_print " 当前环境无法运行 pm"
-  ui_print " 将清除应用限制配置，系统重启后重建"
-  ui_print " 所有应用将恢复默认启用状态"
-  rm -f /data/system/users/0/package-restrictions.xml
-  rm -f /data/system/users/0/package-restrictions.xml.fallback
-  rm -f /data/system/users/0/package-restrictions.xml.reservecopy
-  # 多用户场景
-  for u in /data/system/users/*/; do
-    rm -f "${u}package-restrictions.xml"
-    rm -f "${u}package-restrictions.xml.fallback"
-    rm -f "${u}package-restrictions.xml.reservecopy"
-  done
-  ui_print " 应用限制配置已清除"
-fi
-
+ui_print "======================================"
 ui_print " "
-ui_print " 清理完成，请重启设备"
-ui_print " 如仍有应用缺失，进系统后在终端执行："
-ui_print "   pm install-existing --user 0 <包名>"
-ui_print " "
+progress 1.0 0

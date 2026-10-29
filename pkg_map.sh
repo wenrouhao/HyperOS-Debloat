@@ -117,23 +117,6 @@ get_pkg_name() {
   row_lookup "$1" 3 ""
 }
 
-# 从 apps.db 获取中文显示名
-# 参数：应用路径
-get_display_name() {
-  row_lookup "$1" 2 "$(basename "$1" 2>/dev/null)"
-}
-
-# 从 apps.db 获取分组名
-# 参数：应用路径
-get_group() {
-  row_lookup "$1" 4 "其他"
-}
-
-# 从 apps.db 获取所有应用候选路径
-get_all_apps() {
-  cfg_rows | cut -d'|' -f1
-}
-
 # 从 apps.db 获取所有分组名（按出现顺序，去重）
 get_all_groups() {
   _seen=" "
@@ -144,14 +127,6 @@ get_all_groups() {
     esac
     _seen="$_seen$_group "
     echo "$_group"
-  done
-}
-
-# 从 apps.db 获取指定分组的所有应用候选路径
-# 参数：分组名
-get_apps_by_group() {
-  cfg_rows | while IFS= read -r _line; do
-    [ "$(cfg_field "$_line" 4)" = "$1" ] && cfg_field "$_line" 1
   done
 }
 

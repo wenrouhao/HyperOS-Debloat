@@ -52,7 +52,6 @@ apex:com.android.adservices.api|广告隐私权|com.android.adservices.api|广�
 /system/system_ext/priv-app/PowerInsight|powerinsight(功耗分析)|com.miui.powerinsight|系统服务|3
 /system/system_ext/priv-app/com.qualcomm.qti.services.systemhelper|System Helper Service(系统助手)|com.qualcomm.qti.services.systemhelper|系统服务|3
 /system/priv-app/com.mobiletools.systemhelper;/system/priv-app/SystemHelper|SystemHelper|com.mobiletools.systemhelper|系统服务|3
-/system/product/priv-app/MetokNLP|网络位置服务|com.xiaomi.metoknlp|系统服务|3
 /system/product/priv-app/MIUIQuickSearchBox|搜索|com.android.quicksearchbox|系统服务|3
 /system/app/Stk|USIM卡应用|com.android.stk|系统服务|3
 /product/app/CatchLog|日志抓取|com.bsp.catchlog|系统服务|3

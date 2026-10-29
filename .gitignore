@@ -3,7 +3,7 @@ node_modules/
 
 # 构建缓存
 .parcel-cache/
-
+docs/
 # 旧产物
 output/
 *.zip
@@ -13,7 +13,15 @@ output/
 
 # 本地回归测试脚本（不入库）
 test/
-
+.tmp/
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# AOCI 认知层（本地运行资产，不入库）
+aoci.txt
+aoci.meta.txt
+aoci.code.txt
+.aoci/
+.gitattributes
+AGENTS.md
