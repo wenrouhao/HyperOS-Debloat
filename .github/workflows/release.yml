@@ -85,7 +85,7 @@ jobs:
 
             ### 安装方法
             1. 下载 `HyperOS-Debloat-${{ steps.version.outputs.VERSION }}.zip`
-            2. 在 KernelSU 管理器中从本地安装
+            2. 在 Magisk / KernelSU 管理器中从本地安装
             3. 重启生效
 
             ### 精简模式
@@ -94,7 +94,7 @@ jobs:
             | ✅ 快速精简（推荐） | 广告/追踪 + 游戏中心 |
             | ⚡ 标准精简 | + 设备互联/生态 |
             | 🔥 深度精简 | + AI/小爱 + 内容/工具/安全 + 系统服务 + 无障碍/宏 |
-            | 🎛️ 自定义模式 | 每组可选：全部精简 / 全部保留 / 逐个选择 |
+            | 🎛️ 自定义模式 | 每组可选：精简此组 / 逐个选择 |
           files: |
             HyperOS-Debloat-*.zip
         env:
