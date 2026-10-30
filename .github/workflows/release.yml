@@ -29,19 +29,20 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Extract changelog from CHANGELOG.md
+      - name: Generate changelog from git log
         id: changelog
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          BODY=$(awk -v ver="$VERSION" '
-            index($0, "## " ver) == 1 { flag = 1; next }
-            /^## / && flag { exit }
-            flag { print }
-          ' CHANGELOG.md)
-          [ -z "$BODY" ] && BODY="详见 CHANGELOG.md"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            BODY=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s")
+          else
+            BODY=$(git log --pretty=format:"- %s")
+          fi
+          [ -z "$BODY" ] && BODY="初始版本"
           {
             echo "BODY<<EOF"
             echo "$BODY"
+            echo ""
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
