@@ -4,6 +4,7 @@ node_modules/
 # 构建缓存
 .parcel-cache/
 docs/
+CHANGELOG.md
 # 旧产物
 output/
 *.zip
