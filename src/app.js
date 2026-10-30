@@ -168,7 +168,10 @@ async function applyReplaceBatch(list) {
         script += pmRecordSnippet(app.pkg, true, R);
       }
     } else {
-      script += 'if [ -n "$_mdir" ]; then umount -l "$_mdir" >/dev/null 2>&1; rm -rf "$_mdir"; fi\n';
+      // 恢复：先尝试 umount 系统路径（兼容 Magisk/KernelSU 标准 Magic Mount 的 bind mount），
+      // 不支持运行时 umount 的元模块（如 Magic Mount-rs）会失败，此时删除 .replace 后靠下次重启生效
+      script += 'timeout 5 umount -l "$_real" >/dev/null 2>&1\n';
+      script += 'if [ -n "$_mdir" ]; then rm -rf "$_mdir"; fi\n';
       if (app.pkg) {
         script += "pm install-existing --user 0 '" + app.pkg + "' < /dev/null >/dev/null 2>&1\n";
         script += pmRecordSnippet(app.pkg, false, R);
@@ -176,6 +179,14 @@ async function applyReplaceBatch(list) {
     }
   }
   if (script) await exec(script);
+}
+
+// 与 pkg_map.sh is_blacklisted() 对齐：开机关键组件，任何配置形态都拒绝
+const BLACKLIST = ['com.xiaomi.metoknlp'];
+function isBlacklisted(path, pkg) {
+  const p = (path || '').toLowerCase();
+  const b = (pkg || '').toLowerCase();
+  return BLACKLIST.some(x => b === x || p.includes(x.split('.').pop()));
 }
 
 // 警告文案由 apps.db / apps.conf 下发，WebUI 不再维护副本
@@ -250,6 +261,7 @@ async function loadConfig() {
       if (!trimmed || trimmed.startsWith("#")) return acc;
       const parts = trimmed.split("|");
       if (parts.length >= 4) {
+        if (isBlacklisted(parts[0], parts[2])) return acc; // 黑名单条目直接丢弃，保存时自愈配置
         const group = parts[4] || "其他";
         const fallbackMode = GROUP_MODES[group] !== undefined ? GROUP_MODES[group] : 0;
         acc.push({
@@ -489,8 +501,6 @@ async function saveConfig() {
     for (const app of apps) {
       content += app.path + "|" + app.name + "|" + app.pkg + "|" + (app.status ? "1" : "0") + "|" + app.group + "|" + (app.mode || "0") + "|" + (app.warning || "") + "\n";
     }
-    await exec('cat > "' + target + '" << \'EOF\'\n' + content + 'EOF');
-    await log("Saved, wrote " + apps.length + " entries");
 
     const todo = [];
     if (deletedApps.length > 0) {
@@ -498,7 +508,6 @@ async function saveConfig() {
       for (const app of deletedApps) {
         todo.push({ ...app, status: false });
       }
-      deletedApps = [];
     }
 
     await log("Starting debloat/restore...");
@@ -514,13 +523,31 @@ async function saveConfig() {
     await applyReplaceBatch(todo);
     await log("Done, processed " + changedCount + " apps");
 
+    // 对 path 类型的恢复操作，验证是否即时生效（不支持运行时 umount 的元模块需重启）
+    let needReboot = false;
+    const restoredPathApps = todo.filter(app => !app.status && !/^(apex|pm):/.test(app.path || '') && app.pkg);
+    if (restoredPathApps.length > 0) {
+      const checkScript = restoredPathApps.map(app =>
+        "pm path '" + app.pkg + "' | grep -q . && echo '" + app.pkg + ":ok' || echo '" + app.pkg + ":fail'"
+      ).join('\n');
+      const { stdout: checkOut } = await exec(checkScript);
+      needReboot = (checkOut || '').split('\n').some(line => line.trim().endsWith(':fail'));
+      if (needReboot) await log("Some path apps still hidden, reboot required");
+    }
+
+    // 所有操作成功后才持久化配置，避免失败时配置与实际状态不一致
+    await exec('cat > "' + target + '" << \'EOF\'\n' + content + 'EOF');
+    await log("Saved, wrote " + apps.length + " entries");
+
     originalApps = apps.map(app => ({ ...app }));
 
     await saveToAppsDb();
 
+    deletedApps = [];
+
     savingToast.remove();
 
-    toast("配置已保存");
+    toast(needReboot ? "配置已保存，部分应用需重启后恢复" : "配置已保存");
     changed = false;
   } catch (err) {
     savingToast.remove();
@@ -567,6 +594,32 @@ async function openAddDialog() {
   document.getElementById('addConfirm').disabled = true;
   document.getElementById('addOverlay').classList.add('show');
   await loadSystemApps();
+}
+
+// 批量解析系统应用的真实 APK 目录（一次 exec）。
+// 返回 { pkg: 目录路径 或 null }；/data/app 更新副本、APEX、解析失败一律 null（落回 pm 卸载）
+async function resolveSystemPaths(pkgs) {
+  const result = {};
+  if (!pkgs.length) return result;
+  let cmd = '';
+  for (const p of pkgs) {
+    const q = p.replace(/'/g, "'\\''");
+    cmd += "_o=$(pm path '" + q + "' 2>/dev/null | head -n1); echo '" + q + "|'\"${_o#package:}\"\n";
+  }
+  try {
+    const { stdout } = await exec(cmd);
+    (stdout || '').split('\n').forEach(line => {
+      const i = line.indexOf('|');
+      if (i <= 0) return;
+      const pkg = line.slice(0, i).trim();
+      const dir = line.slice(i + 1).trim().replace(/^package:/, '').replace(/\/[^/]*$/, ''); // 去前缀 + dirname
+      // 只认只读分区路径；其余（/data/app 更新副本、空、异常）落回 pm
+      result[pkg] = /^\/(system|product|system_ext|vendor)\//.test(dir + '/') ? dir : null;
+    });
+  } catch (e) {
+    for (const p of pkgs) result[p] = null;
+  }
+  return result;
 }
 
 async function loadSystemApps() {
@@ -703,16 +756,19 @@ async function confirmAddApps() {
   btn.textContent = '添加中...';
 
   try {
+    // 能拿到只读分区真实路径的走遮蔽（双候选），拿不到的落回 pm 卸载
+    const pathMap = await resolveSystemPaths(addSelectedApps.map(a => a.pkg));
     for (const app of addSelectedApps) {
+      const real = pathMap[app.pkg];
       apps.push({
-        path: app.path,
+        path: real ? real + ';pm:' + app.pkg : 'pm:' + app.pkg,
         name: app.name,
         pkg: app.pkg,
         status: true,
         group: '自定义',
         mode: '0'
       });
-      await log('Add app: ' + app.name + ' (' + app.pkg + ')');
+      await log('Add app: ' + app.name + ' (' + app.pkg + ')' + (real ? ' [mask]' : ' [pm]'));
     }
 
     changed = true;
@@ -845,7 +901,7 @@ document.getElementById('toggleAddApp').addEventListener('click', async function
   if (!addAppEnabled) {
     const confirmed = await showConfirmDialog("dangerOverlay", {
       appName: "⚠️ 免责声明",
-      desc: "开启此功能后，您可以添加系统应用进行精简。\n\n⚠️ 风险提示：\n1. 精简错误的应用可能导致系统不稳定\n2. 建议先备份数据\n3. 操作风险由您自行承担",
+      desc: "开启此功能后，您可以添加系统应用进行精简。\n\n⚠️ 风险提示：\n1. 添加的应用将优先采用开机遮蔽方式精简，遮蔽错误的关键应用可能导致无法开机\n2. 精简错误的应用可能导致系统不稳定\n3. 建议先备份数据\n4. 操作风险由您自行承担",
       confirmText: "确认开启"
     });
     if (!confirmed) return;

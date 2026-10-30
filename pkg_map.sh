@@ -154,6 +154,15 @@ EOF
   echo "$_pkgs"
 }
 
+# 黑名单：已从 apps.db 移除的内置危险条目，禁止作为"自定义应用"回流配置
+# （否则升级后旧配置里的 MetokNLP 会被 conf_append_custom 原样保留，bootloop 复发）
+# 参数：包名 候选路径
+is_blacklisted() {
+  case "$1" in com.xiaomi.metoknlp) return 0 ;; esac
+  case "$2" in *MetokNLP*) return 0 ;; esac
+  return 1
+}
+
 # 输出旧配置中的自定义应用（按包名或路径精确去重），结果含 7 列
 # 参数：旧配置路径 包名列表（形如 " pkg1 pkg2 "）
 conf_append_custom() {
@@ -161,6 +170,7 @@ conf_append_custom() {
   while IFS='|' read -r _p _n _pkg _st _g _m _w; do
     _p="${_p%$(printf '\r')}"
     [ -z "$_p" ] && continue; case "$_p" in \#*) continue ;; esac
+    is_blacklisted "$_pkg" "$_p" && continue
     if [ -n "$_pkg" ]; then
       case "$2" in *" $_pkg "*) continue ;; esac
     else

@@ -3,7 +3,7 @@
   "version": "5.0.0",
   "description": "HyperOS 3 / 4 通用精简模块",
   "scripts": {
-    "build": "rm -rf webroot && parcel build src/index.html --dist-dir webroot --no-source-maps --no-cache --public-url ./",
+    "build": "node -e \"require('fs').rmSync('webroot',{recursive:true,force:true})\" && parcel build src/index.html --dist-dir webroot --no-source-maps --no-cache --public-url ./",
     "dev": "parcel src/index.html"
   },
   "dependencies": {

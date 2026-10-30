@@ -456,10 +456,11 @@ on_install() {
     ui_print " ============================================"
     if getVolumeKey; then
       ui_print "  ✅ 应用旧配置"
-      # 从旧配置中读取状态为1的应用
+      # 从旧配置中读取状态为1的应用（黑名单条目除外，防止已移除的危险应用回流）
       while IFS='|' read -r path name pkg status group mode warn; do
         [ -z "$path" ] && continue
         case "$path" in \#*) continue ;; esac
+        is_blacklisted "$pkg" "$path" && continue
         [ "$status" = "1" ] && add_candidate "$path"
       done < "$old_conf"
       # 生成新配置（data 副本已在上次安装时卸载，REPLACE 会遮蔽系统版本）
