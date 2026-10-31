@@ -1,0 +1,33 @@
+<!doctype html><html lang=""><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0"><meta name="description" content="分享文件-小飞机网盘、小飞机网盘安卓, 小飞机网盘iOS下载、小飞机网盘app"/><meta name="keywords" content="小飞机网盘、上传下载不限速、图片视频无损存储、分享便捷"/><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><link rel="icon" href="/favicon.ico"><title>小飞机网盘</title><script defer="defer" type="module" src="/js/chunk-vendors.8876cca6.js"></script><script defer="defer" type="module" src="/js/app.af9fef98.js"></script><link href="/css/chunk-vendors.66132044.css" rel="stylesheet"><link href="/css/app.37430a31.css" rel="stylesheet"><script defer="defer" src="/js/chunk-vendors-legacy.7174f998.js" nomodule></script><script defer="defer" src="/js/app-legacy.64856e43.js" nomodule></script></head><body ondragstart="return false" oncontextmenu="return false;"><noscript><strong>We're sorry but disk-vue doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div></body><script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script><script>LA.init({id:"KEAB5EFZ8LWdy51k",ck:"KEAB5EFZ8LWdy51k"})</script><script>//关怀模式
+    try {
+        (function () {
+            if (typeof WeixinJSBridge === 'object' && typeof WeixinJSBridge.invoke === 'function') {
+                handleFontSize()
+            } else {
+                if (document.addEventListener) {
+                    document.addEventListener('WeixinJSBridgeReady', handleFontSize, false)
+                } else if (document.attachEvent) {
+                    document.attachEvent('WeixinJSBridgeReady', handleFontSize)
+                    document.attachEvent('onWeixinJSBridgeReady', handleFontSize)
+                }
+            }
+            function handleFontSize () {
+                WeixinJSBridge.invoke('setFontSizeCallback', { fontSize: 0 })
+                WeixinJSBridge.on('menu:setfont', function () {
+                    WeixinJSBridge.invoke('setFontSizeCallback', { fontSize: 0 })
+                })
+            }
+        })()
+    }catch (e){
+    }
+
+    if (window.location.href.indexOf('https://') == 0){
+        setInterval(()=>{
+            let st;
+            st = new Date().getTime();
+            new Function('debugger')()
+            if ((new Date().getTime() - st > 300)){
+                window.location.replace("about:blank");
+            }
+        },300)
+    }</script></html>
