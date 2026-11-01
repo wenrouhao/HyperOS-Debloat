@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="src/assets/logo/logo-lockup-1024.png">
-    <source media="(prefers-color-scheme: light)" srcset="src/assets/logo/logo-lockup-light-1024.png">
-    <img src="src/assets/logo/logo-lockup-light-1024.png" alt="HyperOS-Debloat" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/wenrouhao/HyperOS-Debloat/releases/download/v5.0.3/logo-lockup-1024.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/wenrouhao/HyperOS-Debloat/releases/download/v5.0.3/logo-lockup-light-1024.png">
+    <img src="https://github.com/wenrouhao/HyperOS-Debloat/releases/download/v5.0.3/logo-lockup-light-1024.png" alt="HyperOS-Debloat" width="440">
   </picture>
 </p>
 
@@ -225,9 +225,9 @@ v5.x 之间可直接覆盖刷入，无需卸载旧版；从 v4.x 升级请按安
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="src/assets/logo/logo-wordmark-1024.png">
-    <source media="(prefers-color-scheme: light)" srcset="src/assets/logo/logo-wordmark-light-1024.png">
-    <img src="src/assets/logo/logo-wordmark-light-1024.png" alt="HyperOS-Debloat" width="220">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/wenrouhao/HyperOS-Debloat/releases/download/v5.0.3/logo-wordmark-1024.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/wenrouhao/HyperOS-Debloat/releases/download/v5.0.3/logo-wordmark-light-1024.png">
+    <img src="https://github.com/wenrouhao/HyperOS-Debloat/releases/download/v5.0.3/logo-wordmark-light-1024.png" alt="HyperOS-Debloat" width="220">
   </picture>
 </p>
 

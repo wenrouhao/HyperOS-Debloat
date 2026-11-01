@@ -19,6 +19,9 @@ test/
 .DS_Store
 Thumbs.db
 
+# 完整品牌素材库（本地保留，不入库）
+logo-assets/
+
 # AOCI 认知层（本地运行资产，不入库）
 aoci.txt
 aoci.meta.txt
