@@ -1,6 +1,14 @@
-# HyperOS-Debloat
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="src/assets/logo/logo-lockup-512.png">
+    <source media="(prefers-color-scheme: light)" srcset="src/assets/logo/logo-lockup-light-512.png">
+    <img src="src/assets/logo/logo-lockup-light-512.png" alt="HyperOS-Debloat" width="420">
+  </picture>
+</p>
 
-HyperOS 3 / 4 通用精简模块，支持 4 种精简模式 + WebUI 管理，安全移除不必要的系统应用。
+<h1 align="center">HyperOS-Debloat</h1>
+
+<p align="center">HyperOS 3 / 4 通用精简模块，支持 4 种精简模式 + WebUI 管理，安全移除不必要的系统应用。</p>
 
 ## 适用环境
 

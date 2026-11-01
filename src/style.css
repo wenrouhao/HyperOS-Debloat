@@ -88,9 +88,9 @@
             opacity: 0.5;
         }
         .header-left { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
-        .header-icon {
-            width: 32px; height: 32px;
-            fill: var(--accent);
+        .header-logo {
+            width: 56px; height: 56px; flex: 0 0 auto;
+            object-fit: contain;
             filter: drop-shadow(0 0 6px rgba(0,212,255,0.4));
         }
         .header h1 {
